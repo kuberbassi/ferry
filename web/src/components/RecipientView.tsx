@@ -216,8 +216,22 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
 
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] pt-4 dark:border-white/[0.1]">
               <div className="flex items-center gap-1.5 text-[12px] text-[#6E6E73] dark:text-[#98989D]">
-                <ShieldCheck className="h-4 w-4 text-[#34C759]" />
-                <span>SHA-256 verified on receipt</span>
+                <ShieldCheck
+                  className={`h-4 w-4 ${
+                    state.lifecycle === 'completed'
+                      ? 'text-[#34C759]'
+                      : state.lifecycle === 'transferring'
+                      ? 'text-[#FF9500]'
+                      : 'text-[#8E8E93]'
+                  }`}
+                />
+                <span>
+                  {state.lifecycle === 'completed'
+                    ? 'SHA-256 verified'
+                    : state.lifecycle === 'transferring'
+                    ? 'Integrity verification pending'
+                    : 'SHA-256 verified after full receipt'}
+                </span>
               </div>
 
               <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
