@@ -14,6 +14,13 @@ import { useRecipientSession } from '../hooks/useRecipientSession';
 import { FileRow } from './FileRow';
 import { PeerLinkVisualizer } from './FerryLogo';
 import { SpeedSparkline } from './SpeedSparkline';
+import {
+  acquireWakeLock,
+  clearTransferNotification,
+  releaseWakeLock,
+  requestNotificationPermission,
+  updateTransferNotification,
+} from '../lib/transferNotifier';
 
 interface RecipientViewProps {
   sessionId: string;
@@ -64,6 +71,51 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
     if (tracked.length === 0) return selectedSize || totalSize;
     return tracked.reduce((sum, p) => sum + p.totalBytes, 0);
   }, [selectedSize, state.fileProgress, totalSize]);
+
+  // Background tab notification, tab title progress, wake lock & accidental-close guard
+  useEffect(() => {
+    if (state.lifecycle === 'transferring') {
+      acquireWakeLock();
+      updateTransferNotification({
+        role: 'recipient',
+        transferredBytes,
+        totalBytes: requestedTotalBytes,
+        speedBps: state.speedBps,
+      });
+    } else if (state.lifecycle === 'completed') {
+      releaseWakeLock();
+      updateTransferNotification({
+        role: 'recipient',
+        transferredBytes: requestedTotalBytes,
+        totalBytes: requestedTotalBytes,
+        speedBps: 0,
+        completed: true,
+      });
+    } else {
+      releaseWakeLock();
+      clearTransferNotification();
+    }
+  }, [state.lifecycle, transferredBytes, requestedTotalBytes, state.speedBps]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (state.lifecycle === 'transferring') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    const onVisibility = () => {
+      if (!document.hidden && state.lifecycle === 'completed') {
+        clearTransferNotification();
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [state.lifecycle]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -249,7 +301,10 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
                       <button
                         type="button"
                         disabled={selectedIds.size === 0}
-                        onClick={() => requestFiles(Array.from(selectedIds), true)}
+                        onClick={() => {
+                          requestNotificationPermission();
+                          requestFiles(Array.from(selectedIds), true);
+                        }}
                         className="liquid-glass-pill inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97] disabled:opacity-50 sm:w-auto sm:py-2 dark:text-white"
                       >
                         <FolderDown className="h-4 w-4 text-[#007AFF] dark:text-[#38BDF8]" />
@@ -260,7 +315,10 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
                     <button
                       type="button"
                       disabled={selectedIds.size === 0}
-                      onClick={() => requestFiles(Array.from(selectedIds), false)}
+                      onClick={() => {
+                        requestNotificationPermission();
+                        requestFiles(Array.from(selectedIds), false);
+                      }}
                       className="liquid-btn-primary inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50 sm:w-auto sm:py-2"
                     >
                       <Download className="h-4 w-4" />

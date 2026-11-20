@@ -24,6 +24,13 @@ import { useSenderSession } from '../hooks/useSenderSession';
 import { FileRow } from './FileRow';
 import { PeerLinkVisualizer } from './FerryLogo';
 import { SpeedSparkline } from './SpeedSparkline';
+import {
+  acquireWakeLock,
+  clearTransferNotification,
+  releaseWakeLock,
+  requestNotificationPermission,
+  updateTransferNotification,
+} from '../lib/transferNotifier';
 
 const EXPIRY_OPTIONS: { policy: ExpiryPolicy; ttl: number; label: string; hint: string }[] = [
   { policy: 'duration', ttl: 900, label: '15 min', hint: 'Expires in 15 min' },
@@ -72,6 +79,51 @@ export const SenderView: React.FC = () => {
     if (tracked.length === 0) return totalSize;
     return tracked.reduce((sum, p) => sum + p.totalBytes, 0);
   }, [state.fileProgress, totalSize]);
+
+  // Background tab notification, tab title progress, wake lock & accidental-close guard
+  useEffect(() => {
+    if (state.lifecycle === 'transferring') {
+      acquireWakeLock();
+      updateTransferNotification({
+        role: 'sender',
+        transferredBytes,
+        totalBytes: requestedTotalBytes,
+        speedBps: state.speedBps,
+      });
+    } else if (state.lifecycle === 'completed') {
+      releaseWakeLock();
+      updateTransferNotification({
+        role: 'sender',
+        transferredBytes: requestedTotalBytes,
+        totalBytes: requestedTotalBytes,
+        speedBps: 0,
+        completed: true,
+      });
+    } else {
+      releaseWakeLock();
+      clearTransferNotification();
+    }
+  }, [state.lifecycle, transferredBytes, requestedTotalBytes, state.speedBps]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (state.lifecycle === 'transferring') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    const onVisibility = () => {
+      if (!document.hidden && state.lifecycle === 'completed') {
+        clearTransferNotification();
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [state.lifecycle]);
 
   const isSessionActive =
     state.lifecycle === 'waiting' ||
@@ -378,7 +430,10 @@ export const SenderView: React.FC = () => {
                 <button
                   type="button"
                   disabled={state.lifecycle === 'creating'}
-                  onClick={startSession}
+                  onClick={() => {
+                    requestNotificationPermission();
+                    startSession();
+                  }}
                   className="liquid-btn-primary inline-flex cursor-pointer items-center gap-2 rounded-full px-6 py-2.5 text-[14px] font-medium text-white disabled:opacity-60"
                 >
                   {state.lifecycle === 'creating' ? (
