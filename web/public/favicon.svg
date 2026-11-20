@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ferry">
+  <defs>
+    <linearGradient id="appleBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="0.52" stop-color="#0071E3"/>
+      <stop offset="1" stop-color="#092B68"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="116" fill="url(#appleBg)"/>
+  <rect x="8" y="8" width="496" height="236" rx="116" fill="url(#gloss)"/>
+  <g transform="translate(28, 112) scale(0.38)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M238 345 C405 205 612 113 835 102" stroke="rgba(255,255,255,0.8)" stroke-width="28"/>
+    <path d="M939 111 C1047 122 1083 174 1046 235 C1016 284 957 338 902 391" stroke="rgba(255,255,255,0.72)" stroke-width="28"/>
+    <path d="M458 408 L502 354 Q526 326 567 326 H665 Q691 326 714 348 L777 408" stroke="#ffffff" stroke-width="34"/>
+    <path d="M585 325 L601 265 Q606 245 629 245 H666 Q687 245 705 260 L735 282" stroke="#ffffff" stroke-width="34"/>
+    <path d="M650 245 V174" stroke="#ffffff" stroke-width="28"/>
+    <path d="M655 177 Q700 159 739 179 Q704 201 655 190 Z" fill="#ffffff" stroke="none"/>
+    <path d="M328 500 L380 427 Q399 400 438 397 L826 397 Q855 397 876 420 L946 500 Q899 458 854 449 Q812 441 764 441 H480 Q407 441 328 500 Z" fill="#ffffff" stroke="none"/>
+    <path d="M70 531 C170 581 261 539 361 505 C464 470 535 474 626 504 C704 530 759 540 836 506 C935 462 1027 472 1131 535 C1028 499 953 497 864 534 C770 574 693 576 595 543 C505 513 438 510 355 540 C247 580 160 590 70 531 Z" fill="rgba(255,255,255,0.95)" stroke="none"/>
+    <path d="M300 635 C445 661 591 635 737 584 C878 535 1005 520 1130 548 C1025 527 918 554 800 604 C630 676 450 704 300 635 Z" fill="rgba(255,255,255,0.68)" stroke="none"/>
+    <path d="M939 26 C950 92 964 105 1030 116 C964 127 950 141 939 207 C928 141 914 127 848 116 C914 105 928 92 939 26 Z" fill="#ffffff" stroke="none"/>
+  </g>
+</svg>

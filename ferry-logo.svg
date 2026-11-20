@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Ferry logo</title>
+  <desc id="desc">A clean, flat vector mark of a streamlined ferry sailing over two flowing waves, with a sweeping navigation arc and four-point star.</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#092B68"/>
+      <stop offset="1" stop-color="#075BE8"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Navigation arc -->
+    <path d="M238 345 C405 205 612 113 835 102" stroke="url(#blue)" stroke-width="12"/>
+    <path d="M939 111 C1047 122 1083 174 1046 235 C1016 284 957 338 902 391" stroke="#075BE8" stroke-width="12"/>
+    <!-- Ferry upper deck and bridge -->
+    <path d="M458 408 L502 354 Q526 326 567 326 H665 Q691 326 714 348 L777 408" stroke="#092B68" stroke-width="17"/>
+    <path d="M585 325 L601 265 Q606 245 629 245 H666 Q687 245 705 260 L735 282" stroke="#092B68" stroke-width="17"/>
+    <!-- Flag -->
+    <path d="M650 245 V174" stroke="#092B68" stroke-width="13"/>
+    <path d="M655 177 Q700 159 739 179 Q704 201 655 190 Z" fill="#075BE8" stroke="none"/>
+    <!-- Main hull / cabin silhouette -->
+    <path d="M328 500 L380 427 Q399 400 438 397 L826 397 Q855 397 876 420 L946 500 Q899 458 854 449 Q812 441 764 441 H480 Q407 441 328 500 Z" fill="url(#blue)" stroke="none"/>
+    <path d="M430 397 L485 340 Q505 320 536 320 H664 Q689 320 712 343 L776 397" stroke="#092B68" stroke-width="15"/>
+    <!-- Windows -->
+    <g fill="#075BE8" stroke="none">
+      <path d="M615 453 L655 453 L630 493 H589 Z"/>
+      <path d="M690 453 L730 453 L705 493 H664 Z"/>
+      <path d="M765 453 L805 453 L780 493 H739 Z"/>
+      <path d="M840 453 L880 453 L855 493 H814 Z"/>
+    </g>
+    <!-- Wave one -->
+    <path d="M70 531 C170 581 261 539 361 505 C464 470 535 474 626 504 C704 530 759 540 836 506 C935 462 1027 472 1131 535 C1028 499 953 497 864 534 C770 574 693 576 595 543 C505 513 438 510 355 540 C247 580 160 590 70 531 Z" fill="#092B68" stroke="none"/>
+    <!-- Wave two -->
+    <path d="M300 635 C445 661 591 635 737 584 C878 535 1005 520 1130 548 C1025 527 918 554 800 604 C630 676 450 704 300 635 Z" fill="#075BE8" stroke="none"/>
+  </g>
+  <!-- Four-point navigation sparkle -->
+  <path d="M939 26 C950 92 964 105 1030 116 C964 127 950 141 939 207 C928 141 914 127 848 116 C914 105 928 92 939 26 Z" fill="#075BE8"/>
+</svg>
