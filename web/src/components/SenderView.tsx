@@ -56,7 +56,7 @@ export const SenderView: React.FC = () => {
   const activeGridRef = useRef<HTMLDivElement>(null);
 
   const activeExpiry = EXPIRY_OPTIONS[selectedExpiryIdx];
-  const { state, startSession, endSession, cancelFile } = useSenderSession(
+  const { state, startSession, endSession } = useSenderSession(
     items,
     label,
     activeExpiry.policy,
@@ -573,7 +573,6 @@ export const SenderView: React.FC = () => {
                     key={item.meta.id}
                     file={item.meta}
                     progress={state.fileProgress[item.meta.id]}
-                    onCancel={() => cancelFile(item.meta.id)}
                   />
                 ))}
               </div>
