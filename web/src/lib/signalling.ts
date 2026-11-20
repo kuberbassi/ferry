@@ -145,10 +145,21 @@ export class SignallingClient {
   private joinPayload: Record<string, unknown> | null = null;
   private onSignal: (signal: ServerSignal) => void;
   private onClose: () => void;
+  private onlineHandler: () => void;
 
   constructor(onSignal: (signal: ServerSignal) => void, onClose: () => void) {
     this.onSignal = onSignal;
     this.onClose = onClose;
+    this.onlineHandler = () => {
+      if (!this.closedByUser && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+        if (this.reconnectTimer !== null) {
+          window.clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+        this.openSocket().catch(() => {});
+      }
+    };
+    window.addEventListener('online', this.onlineHandler);
   }
 
   connect(): Promise<void> {
@@ -217,6 +228,7 @@ export class SignallingClient {
 
   close(): void {
     this.closedByUser = true;
+    window.removeEventListener('online', this.onlineHandler);
     this.cleanupTimers();
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);

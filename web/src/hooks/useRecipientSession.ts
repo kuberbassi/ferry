@@ -64,6 +64,11 @@ export function useRecipientSession(sessionId: string) {
   const seqToFileIdRef = useRef<Map<number, string>>(new Map());
   const writersRef = useRef<Map<string, IncomingFileWriter>>(new Map());
   const dirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const requestedIdsRef = useRef<string[]>([]);
+  const completedIdsRef = useRef<Set<string>>(new Set());
+  const endedBySenderRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
   const bytesSinceSampleRef = useRef(0);
   const lastSampleTsRef = useRef(performance.now());
   const lastProgressUiRef = useRef(0);
@@ -129,6 +134,9 @@ export function useRecipientSession(sessionId: string) {
 
       writer.chunks = [];
       writersRef.current.delete(fileId);
+      if (matches) {
+        completedIdsRef.current.add(fileId);
+      }
 
       sendControl({
         v: PROTOCOL_VERSION,
@@ -195,6 +203,20 @@ export function useRecipientSession(sessionId: string) {
           const meta = filesRef.current.find((f) => f.id === msg.fileId);
           if (!meta) return;
 
+          const existingWriter = writersRef.current.get(msg.fileId);
+          if (
+            existingWriter &&
+            msg.startOffset > 0 &&
+            existingWriter.receivedBytes === msg.startOffset
+          ) {
+            // Resuming existing in-memory or disk writer cleanly
+            setState((prev) => ({
+              ...prev,
+              lifecycle: 'transferring',
+            }));
+            return;
+          }
+
           let writable: FileSystemWritableFileStream | null = null;
           if (dirHandleRef.current) {
             writable = await openDirectoryWritable(dirHandleRef.current, meta.relativePath);
@@ -204,7 +226,7 @@ export function useRecipientSession(sessionId: string) {
             fileId: msg.fileId,
             meta,
             hasher: sha256.create(),
-            receivedBytes: msg.startOffset,
+            receivedBytes: 0,
             chunks: [],
             writable,
           });
@@ -216,7 +238,7 @@ export function useRecipientSession(sessionId: string) {
               ...prev.fileProgress,
               [msg.fileId]: {
                 fileId: msg.fileId,
-                bytesTransferred: msg.startOffset,
+                bytesTransferred: 0,
                 totalBytes: meta.size,
                 status: 'transferring',
               },
@@ -300,7 +322,20 @@ export function useRecipientSession(sessionId: string) {
   );
 
   const connect = useCallback(async () => {
-    setState((prev) => ({ ...prev, lifecycle: 'connecting', errorMessage: null }));
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (statsTimerRef.current !== null) {
+      window.clearInterval(statsTimerRef.current);
+      statsTimerRef.current = null;
+    }
+    dcRef.current?.close();
+    pcRef.current?.close();
+    signallingRef.current?.close();
+
+    endedBySenderRef.current = false;
+    setState((prev) => ({ ...prev, lifecycle: 'connecting', speedBps: 0, errorMessage: null }));
     try {
       const [config, sessionInfo] = await Promise.all([
         fetchClientConfig(),
@@ -325,12 +360,22 @@ export function useRecipientSession(sessionId: string) {
         }
       };
 
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          reconnectAttemptRef.current = 0;
+          detectConnectionMode(pc).then((mode) => {
+            setState((prev) => ({ ...prev, connectionMode: mode }));
+          });
+        }
+      };
+
       pc.ondatachannel = (event) => {
         const dc = event.channel;
         dc.binaryType = 'arraybuffer';
         dcRef.current = dc;
 
         dc.onopen = () => {
+          reconnectAttemptRef.current = 0;
           sendControl({
             v: PROTOCOL_VERSION,
             type: 'hello',
@@ -344,23 +389,40 @@ export function useRecipientSession(sessionId: string) {
             setState((prev) => ({ ...prev, connectionMode: mode }));
           });
 
+          // Automatically resume any pending files after a network switch reconnect
+          const pendingIds = requestedIdsRef.current.filter(
+            (id) => !completedIdsRef.current.has(id)
+          );
+          if (pendingIds.length > 0) {
+            const requests = pendingIds.map((fileId) => {
+              const writer = writersRef.current.get(fileId);
+              const startOffset = writer && !writer.writable ? writer.receivedBytes : 0;
+              return { fileId, startOffset };
+            });
+            sendControl({
+              v: PROTOCOL_VERSION,
+              type: 'request_files',
+              requests,
+            });
+          }
+
           lastSampleTsRef.current = performance.now();
           bytesSinceSampleRef.current = 0;
           statsTimerRef.current = window.setInterval(() => {
             const now = performance.now();
             const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
-            const instantBps = bytesSinceSampleRef.current / dt;
+            const rawBps = bytesSinceSampleRef.current / dt;
+            const instantBps = Number.isFinite(rawBps) && rawBps >= 0 ? rawBps : 0;
             bytesSinceSampleRef.current = 0;
             lastSampleTsRef.current = now;
             setState((prev) => {
-              const smoothed =
-                prev.speedBps > 0
-                  ? prev.speedBps * 0.65 + instantBps * 0.35
-                  : instantBps;
+              const prevSafe = Number.isFinite(prev.speedBps) && prev.speedBps >= 0 ? prev.speedBps : 0;
+              const smoothed = prevSafe > 0 ? prevSafe * 0.65 + instantBps * 0.35 : instantBps;
+              const safeOut = Number.isFinite(smoothed) ? smoothed : 0;
               return {
                 ...prev,
-                speedBps: smoothed,
-                speedHistory: [...prev.speedHistory.slice(-29), smoothed],
+                speedBps: safeOut,
+                speedHistory: [...prev.speedHistory.slice(-29), safeOut],
               };
             });
           }, 500);
@@ -377,6 +439,26 @@ export function useRecipientSession(sessionId: string) {
             window.clearInterval(statsTimerRef.current);
             statsTimerRef.current = null;
           }
+
+          const hasPending = requestedIdsRef.current.some(
+            (id) => !completedIdsRef.current.has(id)
+          );
+
+          // If network switched mid-transfer and sender didn't end session, auto-reconnect & resume!
+          if (!endedBySenderRef.current && hasPending && reconnectAttemptRef.current < 5) {
+            reconnectAttemptRef.current += 1;
+            const delay = Math.min(6000, 1200 * reconnectAttemptRef.current);
+            setState((prev) => ({
+              ...prev,
+              speedBps: 0,
+              lifecycle: 'connecting',
+            }));
+            reconnectTimerRef.current = window.setTimeout(() => {
+              connect();
+            }, delay);
+            return;
+          }
+
           abortAllWriters();
           setState((prev) => ({
             ...prev,
@@ -389,6 +471,7 @@ export function useRecipientSession(sessionId: string) {
       const signalClient = new SignallingClient(
         async (signal) => {
           if (signal.type === 'offer') {
+            // Handles both initial offer AND mid-transfer ICE restart offers seamlessly
             await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -399,6 +482,7 @@ export function useRecipientSession(sessionId: string) {
           } else if (signal.type === 'ice_candidate') {
             await pc.addIceCandidate(signal.candidate).catch(() => {});
           } else if (signal.type === 'session_ended') {
+            endedBySenderRef.current = true;
             abortAllWriters();
             setState((prev) => ({
               ...prev,
@@ -435,17 +519,27 @@ export function useRecipientSession(sessionId: string) {
         session_id: sessionId,
       });
     } catch (err) {
+      if (!endedBySenderRef.current && reconnectAttemptRef.current < 3) {
+        reconnectAttemptRef.current += 1;
+        reconnectTimerRef.current = window.setTimeout(() => {
+          connect();
+        }, 2000);
+        return;
+      }
       setState((prev) => ({
         ...prev,
         lifecycle: 'failed',
         errorMessage: err instanceof Error ? err.message : 'Unable to join transfer session',
       }));
     }
-  }, [handleDataMessage, sendControl, sessionId]);
+  }, [abortAllWriters, handleDataMessage, sendControl, sessionId]);
 
   useEffect(() => {
     connect();
     return () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
       if (statsTimerRef.current !== null) {
         window.clearInterval(statsTimerRef.current);
       }
@@ -474,6 +568,7 @@ export function useRecipientSession(sessionId: string) {
         setState((prev) => ({ ...prev, directoryMode: false }));
       }
 
+      requestedIdsRef.current = fileIds;
       const requests = fileIds.map((fileId) => ({
         fileId,
         startOffset: 0,
@@ -489,6 +584,7 @@ export function useRecipientSession(sessionId: string) {
 
   const cancelFile = useCallback(
     (fileId: string) => {
+      requestedIdsRef.current = requestedIdsRef.current.filter((id) => id !== fileId);
       sendControl({
         v: PROTOCOL_VERSION,
         type: 'file_cancel',
@@ -529,6 +625,7 @@ export function useRecipientSession(sessionId: string) {
   );
 
   const cancelAll = useCallback(() => {
+    requestedIdsRef.current = [];
     for (const fileId of Array.from(writersRef.current.keys())) {
       sendControl({ v: PROTOCOL_VERSION, type: 'file_cancel', fileId });
     }

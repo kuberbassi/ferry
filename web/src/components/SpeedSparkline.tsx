@@ -14,10 +14,15 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
   transferredBytes,
   totalBytes,
 }) => {
-  const remaining = Math.max(0, totalBytes - transferredBytes);
-  const pct = totalBytes > 0 ? Math.min(100, (transferredBytes / totalBytes) * 100) : 0;
+  const safeSpeed = Number.isFinite(speedBps) && speedBps > 0 ? speedBps : 0;
+  const safeTransferred =
+    Number.isFinite(transferredBytes) && transferredBytes > 0 ? transferredBytes : 0;
+  const safeTotal = Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0;
+  const remaining = Math.max(0, safeTotal - safeTransferred);
+  const pct = safeTotal > 0 ? Math.min(100, (safeTransferred / safeTotal) * 100) : 0;
 
-  const points = history.length > 1 ? history : [0, speedBps];
+  const cleanHistory = history.filter((v) => Number.isFinite(v) && v >= 0);
+  const points = cleanHistory.length > 1 ? cleanHistory : [0, safeSpeed];
   const maxVal = Math.max(...points, 1024);
   const width = 180;
   const height = 36;
@@ -40,7 +45,7 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
               Speed
             </div>
             <div className="tabular-nums whitespace-nowrap text-[14px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[18px] dark:text-[#F5F5F7]">
-              {formatSpeed(speedBps)}
+              {formatSpeed(safeSpeed)}
             </div>
           </div>
 
@@ -51,7 +56,7 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
               Remaining
             </div>
             <div className="tabular-nums whitespace-nowrap text-[14px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[18px] dark:text-[#F5F5F7]">
-              {formatEta(remaining, speedBps)}
+              {formatEta(remaining, safeSpeed)}
             </div>
           </div>
 
@@ -62,9 +67,9 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
               Transferred
             </div>
             <div className="tabular-nums truncate text-[13px] font-medium text-[#1D1D1F] sm:text-[14px] dark:text-[#F5F5F7]">
-              {formatBytes(transferredBytes)}
+              {formatBytes(safeTransferred)}
               <span className="text-[11px] text-[#6E6E73] sm:text-[12px] dark:text-[#98989D]">
-                {' '}/ {formatBytes(totalBytes)}
+                {' '}/ {formatBytes(safeTotal)}
               </span>
             </div>
           </div>

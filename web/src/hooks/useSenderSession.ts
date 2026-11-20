@@ -375,17 +375,44 @@ export function useSenderSession(
         }
       };
 
+      let iceRestarting = false;
+      const triggerIceRestart = async () => {
+        if (iceRestarting || pc.signalingState === 'closed') return;
+        iceRestarting = true;
+        try {
+          const offer = await pc.createOffer({ iceRestart: true });
+          await pc.setLocalDescription(offer);
+          signallingRef.current?.send({
+            type: 'offer',
+            sdp: offer.sdp,
+            recipient_id: recipientId,
+          });
+        } catch {
+          // Ignore transient ICE restart failure
+        } finally {
+          window.setTimeout(() => {
+            iceRestarting = false;
+          }, 3000);
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          triggerIceRestart();
+        } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          detectConnectionMode(pc).then((mode) => {
+            setState((prev) => ({ ...prev, connectionMode: mode }));
+          });
+        }
+      };
+
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
           detectConnectionMode(pc).then((mode) => {
             setState((prev) => ({ ...prev, connectionMode: mode }));
           });
-        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          setState((prev) => ({
-            ...prev,
-            recipientConnected: false,
-            connectionMode: 'unknown',
-          }));
+        } else if (pc.connectionState === 'failed') {
+          triggerIceRestart();
         }
       };
 
@@ -415,18 +442,17 @@ export function useSenderSession(
         statsTimerRef.current = window.setInterval(() => {
           const now = performance.now();
           const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
-          const instantBps = bytesSinceSampleRef.current / dt;
+          const rawBps = bytesSinceSampleRef.current / dt;
+          const instantBps = Number.isFinite(rawBps) && rawBps >= 0 ? rawBps : 0;
           bytesSinceSampleRef.current = 0;
           lastSampleTsRef.current = now;
           setState((prev) => {
-            const smoothed =
-              prev.speedBps > 0
-                ? prev.speedBps * 0.65 + instantBps * 0.35
-                : instantBps;
+            const prevSafe = Number.isFinite(prev.speedBps) && prev.speedBps >= 0 ? prev.speedBps : 0;
+            const smoothed = prevSafe > 0 ? prevSafe * 0.65 + instantBps * 0.35 : instantBps;
             return {
               ...prev,
-              speedBps: smoothed,
-              speedHistory: [...prev.speedHistory.slice(-29), smoothed],
+              speedBps: Number.isFinite(smoothed) ? smoothed : 0,
+              speedHistory: [...prev.speedHistory.slice(-29), Number.isFinite(smoothed) ? smoothed : 0],
             };
           });
         }, 500);
