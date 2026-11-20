@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { Moon, Sun } from 'lucide-react';
+import { Download, Moon, Sun } from 'lucide-react';
 import { FerryLogo } from './components/FerryLogo';
 import { SenderView } from './components/SenderView';
 import { RecipientView } from './components/RecipientView';
 import { LegalPage } from './components/LegalPages';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 type ActiveRoute =
   | { kind: 'sender' }
@@ -36,6 +41,30 @@ export const App: React.FC = () => {
   });
 
   const navRef = useRef<HTMLDivElement>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => setInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
 
   useEffect(() => {
     const root = document.documentElement;
@@ -117,6 +146,18 @@ export const App: React.FC = () => {
                 Terms
               </button>
             </nav>
+
+            {installPrompt && (
+              <button
+                type="button"
+                onClick={handleInstallApp}
+                title="Install Ferry as an app"
+                className="liquid-glass-pill inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium text-[#1d1d1f] transition-transform active:scale-95 dark:text-white"
+              >
+                <Download className="h-3.5 w-3.5 text-[#0066cc] dark:text-[#2997ff]" />
+                Install
+              </button>
+            )}
 
             <button
               type="button"
