@@ -21,7 +21,6 @@ WORKDIR /app
 COPY --from=server-builder /app/server/target/release/ferry-signalling /usr/local/bin/ferry-signalling
 COPY --from=web-builder /app/web/dist /app/static
 
-ENV PORT=8787
 ENV STATIC_DIR=/app/static
 EXPOSE 8787
 
