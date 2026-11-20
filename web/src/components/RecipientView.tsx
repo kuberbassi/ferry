@@ -88,7 +88,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
     state.lifecycle === 'completed';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
       <div className="flex items-center justify-between">
         <button
           type="button"

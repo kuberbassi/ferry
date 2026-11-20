@@ -110,8 +110,8 @@ export const PeerLinkVisualizer: React.FC<PeerLinkVisualizerProps> = ({
       : 'Waiting for Peer';
 
   return (
-    <div className="liquid-glass rounded-[22px] p-3.5 sm:p-4">
-      <div className="flex items-center justify-between gap-2 sm:gap-3">
+    <div className="liquid-glass w-full min-w-0 overflow-hidden rounded-[22px] p-3.5 sm:p-4">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center sm:h-11 sm:w-11">
             {!connected && (

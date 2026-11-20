@@ -83,7 +83,7 @@ export const FileRow: React.FC<FileRowProps> = React.memo(({
           : 'hover:bg-[#F2F2F7]/80 dark:hover:bg-[#2C2C2E]/60'
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {selectable && (
           <input
             type="checkbox"

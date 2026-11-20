@@ -396,14 +396,14 @@ export const SenderView: React.FC = () => {
         </>
       ) : (
         /* Active Session Dashboard */
-        <div ref={activeGridRef} className="grid items-start gap-6 lg:grid-cols-5">
-          <div className="liquid-glass flex flex-col items-center justify-between rounded-[30px] p-6 text-center lg:col-span-2">
-            <div className="w-full">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#34C759]/15 px-3 py-1 text-[11px] font-semibold text-[#248A3D] dark:bg-[#30D158]/20 dark:text-[#30D158]">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#34C759]" />
-                Online · {activeExpiry.hint}
+        <div ref={activeGridRef} className="grid w-full min-w-0 items-start gap-5 sm:gap-6 lg:grid-cols-5">
+          <div className="liquid-glass flex w-full min-w-0 flex-col items-center justify-between overflow-hidden rounded-[26px] p-5 text-center sm:rounded-[30px] sm:p-6 lg:col-span-2">
+            <div className="w-full min-w-0">
+              <div className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#34C759]/15 px-3 py-1 text-[11px] font-semibold text-[#248A3D] dark:bg-[#30D158]/20 dark:text-[#30D158]">
+                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#34C759]" />
+                <span className="truncate">Online · {activeExpiry.hint}</span>
               </div>
-              <h2 className="mt-3 text-[19px] font-semibold tracking-[-0.02em] text-[#1d1d1f] dark:text-white">
+              <h2 className="mt-3 truncate text-[19px] font-semibold tracking-[-0.02em] text-[#1d1d1f] dark:text-white">
                 {label || 'Ready to Scan'}
               </h2>
               <p className="mt-0.5 text-[13px] text-[#7a7a7a] dark:text-[#cccccc]/70">
@@ -411,12 +411,12 @@ export const SenderView: React.FC = () => {
               </p>
             </div>
 
-            <div className="relative my-5 overflow-hidden rounded-[22px] border border-black/[0.07] bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:border-white/[0.15]">
+            <div className="relative my-5 overflow-hidden rounded-[22px] border border-black/[0.07] bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.04)] sm:p-4 dark:border-white/[0.15]">
               <div className="animate-scan-sweep pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-[#2997ff]/20 to-transparent" />
               {state.shareUrl && (
                 <QRCodeSVG
                   value={state.shareUrl}
-                  size={192}
+                  size={180}
                   level="M"
                   bgColor="#ffffff"
                   fgColor="#1d1d1f"
@@ -424,45 +424,45 @@ export const SenderView: React.FC = () => {
               )}
             </div>
 
-            <div className="w-full space-y-2.5">
-              <div className="flex items-center gap-2 rounded-[14px] border border-black/[0.08] bg-black/[0.035] p-1.5 pl-3 dark:border-white/[0.1] dark:bg-white/[0.06]">
-                <span className="flex-1 truncate font-mono text-[12px] text-[#555555] dark:text-[#cccccc]">
+            <div className="w-full min-w-0 space-y-2.5">
+              <div className="flex w-full min-w-0 items-center gap-2 rounded-[14px] border border-black/[0.08] bg-black/[0.035] p-1.5 pl-3 dark:border-white/[0.1] dark:bg-white/[0.06]">
+                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[#555555] dark:text-[#cccccc]">
                   {state.shareUrl}
                 </span>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="liquid-btn-primary inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[12px] font-medium text-white"
+                  className="liquid-btn-primary inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[12px] font-medium text-white"
                 >
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex w-full min-w-0 gap-2">
                 {'share' in navigator && (
                   <button
                     type="button"
                     onClick={handleNativeShare}
-                    className="liquid-glass-pill inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium text-[#1d1d1f] transition-transform active:scale-[0.97] dark:text-white"
+                    className="liquid-glass-pill inline-flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium text-[#1d1d1f] transition-transform active:scale-[0.97] dark:text-white"
                   >
-                    <Share2 className="h-3.5 w-3.5" />
+                    <Share2 className="h-3.5 w-3.5 shrink-0" />
                     Share
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={endSession}
-                  className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#FF3B30]/20 bg-[#FF3B30]/10 px-3 py-2 text-[13px] font-medium text-[#FF3B30] transition-all hover:bg-[#FF3B30]/18 active:scale-[0.97] dark:border-[#FF453A]/25 dark:text-[#FF453A]"
+                  className="inline-flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#FF3B30]/20 bg-[#FF3B30]/10 px-3 py-2 text-[13px] font-medium text-[#FF3B30] transition-all hover:bg-[#FF3B30]/18 active:scale-[0.97] dark:border-[#FF453A]/25 dark:text-[#FF453A]"
                 >
-                  <Power className="h-3.5 w-3.5" />
+                  <Power className="h-3.5 w-3.5 shrink-0" />
                   End
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-5 lg:col-span-3">
+          <div className="flex w-full min-w-0 flex-col gap-5 lg:col-span-3">
             <PeerLinkVisualizer
               connected={state.recipientConnected}
               transferring={state.lifecycle === 'transferring'}
