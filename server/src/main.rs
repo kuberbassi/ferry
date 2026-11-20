@@ -474,6 +474,11 @@ async fn handle_ws(socket: WebSocket, state: AppState) {
     match role {
         Some(PeerRole::Sender { session_id }) => {
             state.store.disconnect_sender(&session_id).await;
+            let store_clone = state.store.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(15)).await;
+                store_clone.cleanup_sender_if_offline(&session_id).await;
+            });
         }
         Some(PeerRole::Recipient {
             session_id,

@@ -349,14 +349,20 @@ export function useRecipientSession(sessionId: string) {
           statsTimerRef.current = window.setInterval(() => {
             const now = performance.now();
             const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
-            const bps = bytesSinceSampleRef.current / dt;
+            const instantBps = bytesSinceSampleRef.current / dt;
             bytesSinceSampleRef.current = 0;
             lastSampleTsRef.current = now;
-            setState((prev) => ({
-              ...prev,
-              speedBps: bps,
-              speedHistory: [...prev.speedHistory.slice(-29), bps],
-            }));
+            setState((prev) => {
+              const smoothed =
+                prev.speedBps > 0
+                  ? prev.speedBps * 0.65 + instantBps * 0.35
+                  : instantBps;
+              return {
+                ...prev,
+                speedBps: smoothed,
+                speedHistory: [...prev.speedHistory.slice(-29), smoothed],
+              };
+            });
           }, 500);
         };
 

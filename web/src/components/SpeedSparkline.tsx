@@ -32,39 +32,39 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
   const areaPath = `${linePath} L ${width},${height} L 0,${height} Z`;
 
   return (
-    <div className="liquid-glass w-full min-w-0 overflow-hidden rounded-[22px] p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
-          <div>
+    <div className="liquid-glass w-full min-w-0 overflow-hidden rounded-[22px] p-3.5 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-5">
+          <div className="min-w-0">
             <div className="text-[11px] font-medium text-[#6E6E73] dark:text-[#98989D]">
               Speed
             </div>
-            <div className="tabular-nums text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[19px] dark:text-[#F5F5F7]">
+            <div className="tabular-nums whitespace-nowrap text-[14px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[18px] dark:text-[#F5F5F7]">
               {formatSpeed(speedBps)}
             </div>
           </div>
 
           <div className="hidden h-7 w-px bg-black/[0.08] sm:block dark:bg-white/[0.12]" />
 
-          <div>
+          <div className="min-w-0">
             <div className="text-[11px] font-medium text-[#6E6E73] dark:text-[#98989D]">
               Remaining
             </div>
-            <div className="tabular-nums text-[16px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[19px] dark:text-[#F5F5F7]">
+            <div className="tabular-nums whitespace-nowrap text-[14px] font-semibold tracking-[-0.02em] text-[#1D1D1F] sm:text-[18px] dark:text-[#F5F5F7]">
               {formatEta(remaining, speedBps)}
             </div>
           </div>
 
           <div className="hidden h-7 w-px bg-black/[0.08] sm:block dark:bg-white/[0.12]" />
 
-          <div>
+          <div className="min-w-0">
             <div className="text-[11px] font-medium text-[#6E6E73] dark:text-[#98989D]">
               Transferred
             </div>
-            <div className="tabular-nums text-[13px] font-medium text-[#1D1D1F] sm:text-[14px] dark:text-[#F5F5F7]">
-              {formatBytes(transferredBytes)}{' '}
-              <span className="block text-[11px] text-[#6E6E73] sm:inline sm:text-[13px] dark:text-[#98989D]">
-                / {formatBytes(totalBytes)}
+            <div className="tabular-nums truncate text-[13px] font-medium text-[#1D1D1F] sm:text-[14px] dark:text-[#F5F5F7]">
+              {formatBytes(transferredBytes)}
+              <span className="text-[11px] text-[#6E6E73] sm:text-[12px] dark:text-[#98989D]">
+                {' '}/ {formatBytes(totalBytes)}
               </span>
             </div>
           </div>
@@ -72,7 +72,7 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
 
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="h-9 w-full overflow-visible text-[#007AFF] sm:w-[180px] dark:text-[#38BDF8]"
+          className="h-7 w-full overflow-visible text-[#007AFF] sm:h-9 sm:w-[160px] dark:text-[#38BDF8]"
           preserveAspectRatio="none"
         >
           <defs>

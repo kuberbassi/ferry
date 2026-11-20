@@ -404,8 +404,22 @@ impl SessionStore {
 
     pub async fn disconnect_sender(&self, session_id: &str) {
         let mut guard = self.inner.write().await;
-        if let Some(removed) = guard.remove(session_id) {
-            notify_session_ended(removed, "sender_disconnected");
+        if let Some(session) = guard.get_mut(session_id) {
+            session.sender_tx = None;
+            session.last_activity_ms = now_ms();
+        }
+    }
+
+    pub async fn cleanup_sender_if_offline(&self, session_id: &str) {
+        let mut guard = self.inner.write().await;
+        let should_remove = guard
+            .get(session_id)
+            .map(|s| s.sender_tx.is_none())
+            .unwrap_or(false);
+        if should_remove {
+            if let Some(removed) = guard.remove(session_id) {
+                notify_session_ended(removed, "sender_disconnected");
+            }
         }
     }
 
@@ -581,8 +595,9 @@ mod tests {
         // Recipient received Joined
         assert!(matches!(r_rx.recv().await, Some(ServerSignal::Joined { .. })));
 
-        // Sender disconnects
+        // Sender disconnects and does not reconnect within grace period
         store.disconnect_sender(&created.session_id).await;
+        store.cleanup_sender_if_offline(&created.session_id).await;
         assert!(matches!(
             r_rx.recv().await,
             Some(ServerSignal::SessionEnded { reason }) if reason == "sender_disconnected"

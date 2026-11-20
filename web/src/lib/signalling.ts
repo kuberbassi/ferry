@@ -140,6 +140,9 @@ export function getWebSocketUrl(): string {
 export class SignallingClient {
   private ws: WebSocket | null = null;
   private pingTimer: number | null = null;
+  private reconnectTimer: number | null = null;
+  private closedByUser = false;
+  private joinPayload: Record<string, unknown> | null = null;
   private onSignal: (signal: ServerSignal) => void;
   private onClose: () => void;
 
@@ -149,19 +152,31 @@ export class SignallingClient {
   }
 
   connect(): Promise<void> {
+    this.closedByUser = false;
+    return this.openSocket();
+  }
+
+  private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(getWebSocketUrl());
       this.ws = ws;
+      let opened = false;
 
       ws.onopen = () => {
+        opened = true;
         this.pingTimer = window.setInterval(() => {
           this.send({ type: 'ping' });
-        }, 20_000);
+        }, 15_000);
+        if (this.joinPayload) {
+          ws.send(JSON.stringify(this.joinPayload));
+        }
         resolve();
       };
 
       ws.onerror = () => {
-        reject(new Error('Could not connect to Ferry signalling service'));
+        if (!opened) {
+          reject(new Error('Could not connect to Ferry signalling service'));
+        }
       };
 
       ws.onmessage = (event) => {
@@ -175,19 +190,38 @@ export class SignallingClient {
 
       ws.onclose = () => {
         this.cleanupTimers();
-        this.onClose();
+        if (this.closedByUser) {
+          this.onClose();
+          return;
+        }
+        // Auto-reconnect signalling silently so active WebRTC transfers survive proxy WS drops
+        this.reconnectTimer = window.setTimeout(() => {
+          if (!this.closedByUser) {
+            this.openSocket().catch(() => {
+              this.onClose();
+            });
+          }
+        }, 1500);
       };
     });
   }
 
   send(payload: Record<string, unknown>): void {
+    if (payload.type === 'join_sender' || payload.type === 'join_recipient') {
+      this.joinPayload = payload;
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(payload));
     }
   }
 
   close(): void {
+    this.closedByUser = true;
     this.cleanupTimers();
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.onclose = null;
       this.ws.close();

@@ -415,14 +415,20 @@ export function useSenderSession(
         statsTimerRef.current = window.setInterval(() => {
           const now = performance.now();
           const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
-          const bps = bytesSinceSampleRef.current / dt;
+          const instantBps = bytesSinceSampleRef.current / dt;
           bytesSinceSampleRef.current = 0;
           lastSampleTsRef.current = now;
-          setState((prev) => ({
-            ...prev,
-            speedBps: bps,
-            speedHistory: [...prev.speedHistory.slice(-29), bps],
-          }));
+          setState((prev) => {
+            const smoothed =
+              prev.speedBps > 0
+                ? prev.speedBps * 0.65 + instantBps * 0.35
+                : instantBps;
+            return {
+              ...prev,
+              speedBps: smoothed,
+              speedHistory: [...prev.speedHistory.slice(-29), smoothed],
+            };
+          });
         }, 500);
       };
 
@@ -539,6 +545,13 @@ export function useSenderSession(
               hasTurnRelay: config.has_turn_relay,
             }));
           } else if (signal.type === 'peer_joined') {
+            if (
+              activeRecipientIdRef.current === signal.recipient_id &&
+              dcRef.current &&
+              (dcRef.current.readyState === 'open' || dcRef.current.readyState === 'connecting')
+            ) {
+              return;
+            }
             setState((prev) => ({ ...prev, lifecycle: 'connecting' }));
             await setupPeerForRecipient(signal.recipient_id, config.ice_servers);
           } else if (signal.type === 'peer_left') {
