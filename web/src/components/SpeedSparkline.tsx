@@ -32,7 +32,7 @@ export const SpeedSparkline: React.FC<SpeedSparklineProps> = ({
   const areaPath = `${linePath} L ${width},${height} L 0,${height} Z`;
 
   return (
-    <div className="liquid-glass rounded-[22px] p-4">
+    <div className="liquid-glass w-full min-w-0 overflow-hidden rounded-[22px] p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
           <div>

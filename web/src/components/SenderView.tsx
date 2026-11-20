@@ -283,7 +283,7 @@ export const SenderView: React.FC = () => {
 
           {/* Selected Files Sheet */}
           {items.length > 0 && (
-            <div className="liquid-glass animate-pop-in rounded-[30px] p-6 sm:p-7">
+            <div className="liquid-glass animate-pop-in w-full min-w-0 overflow-hidden rounded-[26px] p-5 sm:rounded-[30px] sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.1]">
                 <div>
                   <h3 className="text-[17px] font-semibold tracking-[-0.015em] text-[#1d1d1f] dark:text-white">

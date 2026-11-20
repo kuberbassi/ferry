@@ -169,7 +169,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
             </div>
           )}
 
-          <div className="liquid-glass rounded-[30px] p-5 sm:p-6">
+          <div className="liquid-glass w-full min-w-0 overflow-hidden rounded-[26px] p-5 sm:rounded-[30px] sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.1]">
               <div>
                 <h2 className="text-[18px] font-semibold tracking-[-0.02em] text-[#1D1D1F] dark:text-white">

@@ -46,7 +46,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ page, onBack, onSwitch }) 
         </div>
       </div>
 
-      <article className="liquid-glass rounded-[28px] p-7 sm:p-10">
+      <article className="liquid-glass w-full min-w-0 overflow-hidden rounded-[26px] p-5 sm:rounded-[28px] sm:p-10">
         {page === 'privacy' ? (
           <div className="space-y-6 text-[14.5px] leading-[1.65] text-[#424245] dark:text-[#D1D5DB]">
             <header className="border-b border-black/[0.06] pb-5 dark:border-white/[0.08]">
