@@ -113,7 +113,7 @@ export const App: React.FC = () => {
       <div className="aurora-backdrop pointer-events-none fixed inset-0" />
 
       {/* Minimal Floating Liquid Glass Navbar */}
-      <header className="sticky top-0 z-30 mx-auto w-full max-w-[980px] px-4 pt-3 sm:px-6 sm:pt-5">
+      <header className="sticky top-0 z-30 mx-auto w-full max-w-[980px] px-4 pt-[max(0.65rem,env(safe-area-inset-top))] sm:px-6 sm:pt-5">
         <div
           ref={navRef}
           className="liquid-glass flex items-center justify-between rounded-full px-4 py-2.5 sm:px-5"
@@ -172,7 +172,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 mx-auto w-full max-w-[980px] flex-1 px-4 pb-6 pt-5 sm:px-6 sm:pb-16 sm:pt-10">
+      <main className="relative z-10 mx-auto w-full max-w-[980px] flex-1 px-4 pb-4 pt-4 sm:px-6 sm:pb-16 sm:pt-10">
         {route.kind === 'recipient' ? (
           <RecipientView sessionId={route.sessionId} onExitToSender={navigateHome} />
         ) : route.kind === 'legal' ? (
@@ -187,7 +187,7 @@ export const App: React.FC = () => {
       </main>
 
       {/* Clean Apple-style Footer */}
-      <footer className="relative z-10 mx-auto flex w-full max-w-[980px] flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-[12px] text-[#7a7a7a] sm:px-6 sm:py-6 dark:border-white/[0.08] dark:text-[#cccccc]/70">
+      <footer className="relative z-10 mx-auto flex w-full max-w-[980px] flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-[12px] text-[#7a7a7a] sm:px-6 sm:py-6 dark:border-white/[0.08] dark:text-[#cccccc]/70">
         <span>
           Ferry · by{' '}
           <a

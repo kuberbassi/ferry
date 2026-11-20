@@ -185,7 +185,7 @@ export const SenderView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-10">
+    <div className="space-y-5 sm:space-y-10">
       <input
         ref={fileInputRef}
         type="file"
@@ -206,15 +206,15 @@ export const SenderView: React.FC = () => {
       {!isSessionActive ? (
         <>
           {/* Clean Editorial Hero (Apple DESIGN.md scale) */}
-          <div ref={heroRef} className="mx-auto max-w-2xl pt-2 text-center sm:pt-6">
-            <h1 className="apple-hero-title text-[34px] font-semibold text-[#1d1d1f] sm:text-[56px] dark:text-white">
+          <div ref={heroRef} className="mx-auto max-w-2xl pt-0 text-center sm:pt-6">
+            <h1 className="apple-hero-title text-[30px] font-semibold text-[#1d1d1f] sm:text-[56px] dark:text-white">
               Big files. One scan.
               <br />
               <span className="bg-gradient-to-r from-[#0066cc] via-[#2997ff] to-[#38BDF8] bg-clip-text text-transparent">
                 Zero storage.
               </span>
             </h1>
-            <p className="apple-body mx-auto mt-3 max-w-md text-[15px] font-normal text-[#7a7a7a] sm:mt-4 sm:text-[17px] dark:text-[#cccccc]/80">
+            <p className="apple-body mx-auto mt-2 max-w-md text-[14px] font-normal text-[#7a7a7a] sm:mt-4 sm:text-[17px] dark:text-[#cccccc]/80">
               Send files or folders straight to another device. Keep this tab open until they finish.
             </p>
           </div>
@@ -230,7 +230,7 @@ export const SenderView: React.FC = () => {
             onDrop={handleDrop}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            className={`liquid-glass group relative overflow-hidden rounded-[28px] px-5 py-9 text-center transition-shadow duration-300 sm:rounded-[32px] sm:px-12 sm:py-20 ${
+            className={`liquid-glass group relative overflow-hidden rounded-[26px] px-5 py-7 text-center transition-shadow duration-300 sm:rounded-[32px] sm:px-12 sm:py-20 ${
               isDragging ? 'ring-2 ring-[#2997ff]/75' : ''
             }`}
           >
@@ -246,21 +246,21 @@ export const SenderView: React.FC = () => {
             />
 
             <div className="relative z-10 mx-auto flex max-w-md flex-col items-center">
-              <div className="relative mb-6 flex h-20 w-20 items-center justify-center">
+              <div className="relative mb-4 flex h-16 w-16 items-center justify-center sm:mb-6 sm:h-20 sm:w-20">
                 <span className="animate-airdrop-ripple absolute inset-0 rounded-full border border-[#0071e3]/35 dark:border-[#2997ff]/40" />
                 <div
                   ref={coreIconRef}
-                  className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-[#38BDF8]/25 to-[#0071e3]/20 text-[#0066cc] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)] backdrop-blur-xl dark:text-[#2997ff]"
+                  className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-b from-[#38BDF8]/25 to-[#0071e3]/20 text-[#0066cc] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)] backdrop-blur-xl sm:h-20 sm:w-20 dark:text-[#2997ff]"
                 >
-                  <ArrowUpCircle className="h-9 w-9 stroke-[1.65]" />
+                  <ArrowUpCircle className="h-8 w-8 stroke-[1.65] sm:h-9 sm:w-9" />
                 </div>
               </div>
 
-              <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#1d1d1f] dark:text-white">
+              <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-[#1d1d1f] sm:text-[22px] dark:text-white">
                 {isDragging ? 'Drop to add' : 'Drop files or folders'}
               </h2>
 
-              <div className="mt-6 flex w-full flex-col items-center justify-center gap-2.5 sm:mt-7 sm:w-auto sm:flex-row sm:gap-3">
+              <div className="mt-5 flex w-full flex-col items-center justify-center gap-2.5 sm:mt-7 sm:w-auto sm:flex-row sm:gap-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
