@@ -185,7 +185,7 @@ export const SenderView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 sm:space-y-10">
       <input
         ref={fileInputRef}
         type="file"
@@ -230,7 +230,7 @@ export const SenderView: React.FC = () => {
             onDrop={handleDrop}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            className={`liquid-glass group relative overflow-hidden rounded-[28px] px-5 py-11 text-center transition-shadow duration-300 sm:rounded-[32px] sm:px-12 sm:py-20 ${
+            className={`liquid-glass group relative overflow-hidden rounded-[28px] px-5 py-9 text-center transition-shadow duration-300 sm:rounded-[32px] sm:px-12 sm:py-20 ${
               isDragging ? 'ring-2 ring-[#2997ff]/75' : ''
             }`}
           >
