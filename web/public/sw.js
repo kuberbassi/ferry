@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ferry-shell-v2';
+const CACHE_NAME = 'ferry-shell-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -56,5 +56,21 @@ self.addEventListener('fetch', (event) => {
 
       return cached || networkFetch;
     })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow('/');
+      })
   );
 });

@@ -23,6 +23,7 @@ import {
   SignallingClient,
 } from '../lib/signalling';
 import { detectConnectionMode } from '../lib/rtcStats';
+import { createBgInterval } from '../lib/bgTimer';
 
 export interface SenderSessionState {
   lifecycle: SessionLifecycle;
@@ -80,7 +81,8 @@ export function useSenderSession(
   const fileSeqCounterRef = useRef(1);
   const bytesSinceSampleRef = useRef(0);
   const lastSampleTsRef = useRef(performance.now());
-  const statsTimerRef = useRef<number | null>(null);
+  const stopStatsTimerRef = useRef<(() => void) | null>(null);
+  const ackedBytesRef = useRef<Map<string, number>>(new Map());
 
   const sendControl = useCallback((msg: DataControlMessage) => {
     const dc = dcRef.current;
@@ -114,9 +116,9 @@ export function useSenderSession(
   }, [items, broadcastManifest, state.lifecycle]);
 
   const cleanupPeer = useCallback(() => {
-    if (statsTimerRef.current !== null) {
-      window.clearInterval(statsTimerRef.current);
-      statsTimerRef.current = null;
+    if (stopStatsTimerRef.current) {
+      stopStatsTimerRef.current();
+      stopStatsTimerRef.current = null;
     }
     if (dcRef.current) {
       dcRef.current.close();
@@ -149,23 +151,26 @@ export function useSenderSession(
   }, []);
 
   const waitForBufferDrain = (dc: RTCDataChannel): Promise<void> => {
-    if (dc.bufferedAmount <= MAX_BUFFERED_AMOUNT) {
+    if (dc.bufferedAmount <= MAX_BUFFERED_AMOUNT || dc.readyState !== 'open') {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
-      const onLow = () => {
-        dc.removeEventListener('bufferedamountlow', onLow);
+      let done = false;
+      let stopPoll: (() => void) | null = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        dc.removeEventListener('bufferedamountlow', finish);
+        if (stopPoll) stopPoll();
         resolve();
       };
-      dc.addEventListener('bufferedamountlow', onLow);
-      // Safety fallback poll in case event is missed
-      const check = window.setInterval(() => {
+      dc.addEventListener('bufferedamountlow', finish);
+      // Unthrottled Web Worker poll so background tab switching never stalls WebRTC
+      stopPoll = createBgInterval(() => {
         if (dc.readyState !== 'open' || dc.bufferedAmount <= BUFFERED_LOW_THRESHOLD) {
-          window.clearInterval(check);
-          dc.removeEventListener('bufferedamountlow', onLow);
-          resolve();
+          finish();
         }
-      }, 40);
+      }, 20);
     });
   };
 
@@ -297,7 +302,8 @@ export function useSenderSession(
           bytesSinceSampleRef.current += chunk.byteLength;
 
           const now = performance.now();
-          if (now - lastUiUpdate >= 80) {
+          const uiInterval = document.hidden ? 500 : 80;
+          if (now - lastUiUpdate >= uiInterval) {
             lastUiUpdate = now;
             const currentSent = offset + batchPos;
             setState((prev) => ({
@@ -459,7 +465,7 @@ export function useSenderSession(
 
         lastSampleTsRef.current = performance.now();
         bytesSinceSampleRef.current = 0;
-        statsTimerRef.current = window.setInterval(() => {
+        stopStatsTimerRef.current = createBgInterval(() => {
           const now = performance.now();
           const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
           const rawBps = bytesSinceSampleRef.current / dt;
@@ -494,6 +500,8 @@ export function useSenderSession(
             processStreamQueue();
           } else if (msg.type === 'file_cancel') {
             cancelledFilesRef.current.add(msg.fileId);
+          } else if (msg.type === 'chunk_ack') {
+            ackedBytesRef.current.set(msg.fileId, msg.ackedBytes);
           } else if (msg.type === 'file_ack') {
             setState((prev) => {
               const existing = prev.fileProgress[msg.fileId];

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
+  ACK_INTERVAL_BYTES,
   ConnectionMode,
   DataControlMessage,
   decodeChunkFrame,
@@ -18,12 +19,24 @@ import {
   SignallingClient,
 } from '../lib/signalling';
 import { detectConnectionMode } from '../lib/rtcStats';
+import { createBgInterval } from '../lib/bgTimer';
+import {
+  clearResumeFile,
+  getResumeMeta,
+  purgeExpiredResumeData,
+  readResumeBlocks,
+  saveResumeBlock,
+} from '../lib/resumeStore';
 
 interface IncomingFileWriter {
   fileId: string;
   meta: TransferFile;
   hasher: ReturnType<typeof sha256.create>;
   receivedBytes: number;
+  resumedFromBytes: number;
+  pendingBlockChunks: Uint8Array[];
+  pendingBlockBytes: number;
+  nextBlockIdx: number;
   chunks: BlobPart[];
   writable: FileSystemWritableFileStream | null;
 }
@@ -72,7 +85,7 @@ export function useRecipientSession(sessionId: string) {
   const bytesSinceSampleRef = useRef(0);
   const lastSampleTsRef = useRef(performance.now());
   const lastProgressUiRef = useRef(0);
-  const statsTimerRef = useRef<number | null>(null);
+  const stopStatsTimerRef = useRef<(() => void) | null>(null);
 
   const sendControl = useCallback((msg: DataControlMessage) => {
     const dc = dcRef.current;
@@ -123,17 +136,39 @@ export function useRecipientSession(sessionId: string) {
       const writer = writersRef.current.get(fileId);
       if (!writer) return;
 
-      const actualSha256 = bytesToHex(writer.hasher.digest());
+      let fullChunks: BlobPart[] = writer.chunks;
+      let actualSha256: string;
+
+      if (writer.resumedFromBytes > 0 && !writer.writable) {
+        // Reconstruct full file from IndexedDB retained blocks + newly received chunks
+        const retainedBlocks = await readResumeBlocks(sessionId, fileId);
+        const fullHasher = sha256.create();
+        for (const block of retainedBlocks) {
+          fullHasher.update(block);
+        }
+        for (const chunk of writer.chunks) {
+          if (chunk instanceof Uint8Array) {
+            fullHasher.update(chunk);
+          }
+        }
+        actualSha256 = bytesToHex(fullHasher.digest());
+        fullChunks = [...(retainedBlocks as BlobPart[]), ...writer.chunks];
+      } else {
+        actualSha256 = bytesToHex(writer.hasher.digest());
+      }
+
       const matches = actualSha256 === expectedSha256 && writer.receivedBytes === expectedTotal;
 
       if (writer.writable) {
         await writer.writable.close();
       } else if (matches) {
-        triggerBlobDownload(writer.meta, writer.chunks);
+        triggerBlobDownload(writer.meta, fullChunks);
       }
 
       writer.chunks = [];
+      writer.pendingBlockChunks = [];
       writersRef.current.delete(fileId);
+      await clearResumeFile(sessionId, fileId);
       if (matches) {
         completedIdsRef.current.add(fileId);
       }
@@ -222,11 +257,19 @@ export function useRecipientSession(sessionId: string) {
             writable = await openDirectoryWritable(dirHandleRef.current, meta.relativePath);
           }
 
+          const startOffset = !writable ? msg.startOffset : 0;
+          const nextBlockIdx =
+            startOffset > 0 ? Math.floor(startOffset / ACK_INTERVAL_BYTES) : 0;
+
           writersRef.current.set(msg.fileId, {
             fileId: msg.fileId,
             meta,
             hasher: sha256.create(),
-            receivedBytes: 0,
+            receivedBytes: startOffset,
+            resumedFromBytes: startOffset,
+            pendingBlockChunks: [],
+            pendingBlockBytes: 0,
+            nextBlockIdx,
             chunks: [],
             writable,
           });
@@ -238,7 +281,7 @@ export function useRecipientSession(sessionId: string) {
               ...prev.fileProgress,
               [msg.fileId]: {
                 fileId: msg.fileId,
-                bytesTransferred: 0,
+                bytesTransferred: startOffset,
                 totalBytes: meta.size,
                 status: 'transferring',
               },
@@ -296,13 +339,45 @@ export function useRecipientSession(sessionId: string) {
       if (writer.writable) {
         await writer.writable.write(frame.payload as unknown as BufferSource);
       } else {
-        writer.chunks.push(new Uint8Array(frame.payload));
+        const copy = new Uint8Array(frame.payload);
+        writer.chunks.push(copy);
+        writer.pendingBlockChunks.push(copy);
+        writer.pendingBlockBytes += copy.byteLength;
+
+        if (writer.pendingBlockBytes >= ACK_INTERVAL_BYTES) {
+          const merged = new Uint8Array(writer.pendingBlockBytes);
+          let pos = 0;
+          for (const part of writer.pendingBlockChunks) {
+            merged.set(part, pos);
+            pos += part.byteLength;
+          }
+          const blockIdx = writer.nextBlockIdx++;
+          writer.pendingBlockChunks = [];
+          writer.pendingBlockBytes = 0;
+
+          const acked = writer.receivedBytes + frame.payload.byteLength;
+          await saveResumeBlock(
+            sessionId,
+            fileId,
+            blockIdx,
+            merged,
+            acked,
+            writer.meta.size
+          );
+          sendControl({
+            v: PROTOCOL_VERSION,
+            type: 'chunk_ack',
+            fileId,
+            ackedBytes: acked,
+          });
+        }
       }
       writer.receivedBytes += frame.payload.byteLength;
       bytesSinceSampleRef.current += frame.payload.byteLength;
 
       const now = performance.now();
-      if (now - lastProgressUiRef.current >= 80 || writer.receivedBytes >= writer.meta.size) {
+      const uiInterval = document.hidden ? 500 : 80;
+      if (now - lastProgressUiRef.current >= uiInterval || writer.receivedBytes >= writer.meta.size) {
         lastProgressUiRef.current = now;
         setState((prev) => ({
           ...prev,
@@ -326,9 +401,9 @@ export function useRecipientSession(sessionId: string) {
       window.clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    if (statsTimerRef.current !== null) {
-      window.clearInterval(statsTimerRef.current);
-      statsTimerRef.current = null;
+    if (stopStatsTimerRef.current) {
+      stopStatsTimerRef.current();
+      stopStatsTimerRef.current = null;
     }
     dcRef.current?.close();
     pcRef.current?.close();
@@ -413,33 +488,39 @@ export function useRecipientSession(sessionId: string) {
             setState((prev) => ({ ...prev, connectionMode: mode }));
           });
 
-          // Automatically resume any pending files after a network switch reconnect
+          // Automatically resume any pending files from IndexedDB / memory offset
           const pendingIds = requestedIdsRef.current.filter(
             (id) => !completedIdsRef.current.has(id)
           );
           if (pendingIds.length > 0) {
-            const requests = pendingIds.map((fileId) => {
-              const writer = writersRef.current.get(fileId);
-              const startOffset = writer && !writer.writable ? writer.receivedBytes : 0;
-              return { fileId, startOffset };
-            });
-            sendControl({
-              v: PROTOCOL_VERSION,
-              type: 'request_files',
-              requests,
+            Promise.all(
+              pendingIds.map(async (fileId) => {
+                const writer = writersRef.current.get(fileId);
+                if (writer && !writer.writable && writer.receivedBytes > 0) {
+                  return { fileId, startOffset: writer.receivedBytes };
+                }
+                const meta = await getResumeMeta(sessionId, fileId);
+                return { fileId, startOffset: meta?.ackedBytes ?? 0 };
+              })
+            ).then((requests) => {
+              sendControl({
+                v: PROTOCOL_VERSION,
+                type: 'request_files',
+                requests,
+              });
             });
           }
 
           lastSampleTsRef.current = performance.now();
           bytesSinceSampleRef.current = 0;
-          statsTimerRef.current = window.setInterval(() => {
+          stopStatsTimerRef.current = createBgInterval(() => {
             const now = performance.now();
             const dt = Math.max(0.1, (now - lastSampleTsRef.current) / 1000);
             const rawBps = bytesSinceSampleRef.current / dt;
             const instantBps = Number.isFinite(rawBps) && rawBps >= 0 ? rawBps : 0;
             bytesSinceSampleRef.current = 0;
             lastSampleTsRef.current = now;
-            setState((prev) => {
+          setState((prev) => {
               const prevSafe = Number.isFinite(prev.speedBps) && prev.speedBps >= 0 ? prev.speedBps : 0;
               const smoothed = prevSafe > 0 ? prevSafe * 0.65 + instantBps * 0.35 : instantBps;
               const safeOut = Number.isFinite(smoothed) ? smoothed : 0;
@@ -459,9 +540,9 @@ export function useRecipientSession(sessionId: string) {
         };
 
         dc.onclose = () => {
-          if (statsTimerRef.current !== null) {
-            window.clearInterval(statsTimerRef.current);
-            statsTimerRef.current = null;
+          if (stopStatsTimerRef.current) {
+            stopStatsTimerRef.current();
+            stopStatsTimerRef.current = null;
           }
 
           const hasPending = requestedIdsRef.current.some(
@@ -559,13 +640,14 @@ export function useRecipientSession(sessionId: string) {
   }, [abortAllWriters, handleDataMessage, sendControl, sessionId]);
 
   useEffect(() => {
+    purgeExpiredResumeData();
     connect();
     return () => {
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
       }
-      if (statsTimerRef.current !== null) {
-        window.clearInterval(statsTimerRef.current);
+      if (stopStatsTimerRef.current) {
+        stopStatsTimerRef.current();
       }
       dcRef.current?.close();
       pcRef.current?.close();
@@ -620,17 +702,20 @@ export function useRecipientSession(sessionId: string) {
         };
       });
 
-      const requests = fileIds.map((fileId) => ({
-        fileId,
-        startOffset: 0,
-      }));
+      const requests = await Promise.all(
+        fileIds.map(async (fileId) => {
+          if (saveToFolder) return { fileId, startOffset: 0 };
+          const meta = await getResumeMeta(sessionId, fileId);
+          return { fileId, startOffset: meta?.ackedBytes ?? 0 };
+        })
+      );
       sendControl({
         v: PROTOCOL_VERSION,
         type: 'request_files',
         requests,
       });
     },
-    [connect, sendControl]
+    [connect, sendControl, sessionId]
   );
 
   const cancelFile = useCallback(
@@ -649,6 +734,7 @@ export function useRecipientSession(sessionId: string) {
         }
         writersRef.current.delete(fileId);
       }
+      clearResumeFile(sessionId, fileId);
       setState((prev) => {
         const nextProgress = {
           ...prev.fileProgress,
@@ -683,6 +769,7 @@ export function useRecipientSession(sessionId: string) {
     requestedIdsRef.current = [];
     for (const fileId of toCancel) {
       sendControl({ v: PROTOCOL_VERSION, type: 'file_cancel', fileId });
+      clearResumeFile(sessionId, fileId);
     }
     abortAllWriters();
     setState((prev) => ({
