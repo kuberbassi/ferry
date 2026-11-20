@@ -188,7 +188,17 @@ export const App: React.FC = () => {
 
       {/* Clean Apple-style Footer */}
       <footer className="relative z-10 mx-auto flex w-full max-w-[980px] flex-wrap items-center justify-between gap-4 border-t border-black/[0.06] px-4 py-6 text-[12px] text-[#7a7a7a] sm:px-6 dark:border-white/[0.08] dark:text-[#cccccc]/70">
-        <span>Ferry · Direct file transfer</span>
+        <span>
+          Ferry · by{' '}
+          <a
+            href="https://kuberbassi.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:text-[#1d1d1f] dark:hover:text-white"
+          >
+            kuberbassi.com
+          </a>
+        </span>
         <div className="flex items-center gap-5">
           <button
             type="button"

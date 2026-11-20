@@ -1,0 +1,17 @@
+# Ferry
+
+> Big files. One scan. Zero storage. Direct browser-to-browser peer-to-peer file transfer.
+
+Ferry is a temporary, no-account web app for sending large files, multi-file collections, and folders directly between browsers over encrypted WebRTC data channels.
+
+- Website: https://ferry.kuberbassi.com
+- Creator: Kuber Bassi (https://kuberbassi.com)
+- Source Code: https://github.com/kuberbassi/ferry
+- License: MIT
+
+## Core Pages
+
+- [Home](https://ferry.kuberbassi.com/): Select files or folders, create a temporary session, and share via QR code or link.
+- [Privacy Policy](https://ferry.kuberbassi.com/?p=privacy): Explains zero permanent file storage, temporary signalling metadata, and TURN relay handling.
+- [Terms of Use](https://ferry.kuberbassi.com/?p=terms): Explains sender availability requirements, browser constraints, and integrity verification.
+- [Full Documentation](https://ferry.kuberbassi.com/llms-full.txt): Complete technical and architectural reference.

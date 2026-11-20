@@ -1,0 +1,34 @@
+# Ferry — Full Reference
+
+> Big files. One scan. Zero storage.
+
+## Overview
+
+Ferry (https://ferry.kuberbassi.com) is an open-source, browser-based peer-to-peer file transfer service built by **Kuber Bassi** (https://kuberbassi.com). It lets a sender share individual large files, multi-file batches, or full directory hierarchies using a single QR code or URL, without creating an account or uploading file contents to cloud storage.
+
+- **Creator:** Kuber Bassi
+- **Creator Website:** https://kuberbassi.com
+- **GitHub Profile:** https://github.com/kuberbassi
+- **Repository:** https://github.com/kuberbassi/ferry
+- **License:** MIT
+
+## How It Works
+
+1. **File Selection:** The sender selects files or drops folders into the browser. Files stay local on the sender's device.
+2. **Temporary Session:** A lightweight Rust + Axum WebSocket signalling service creates a high-entropy session ID and sender authorization token in memory.
+3. **Peer-to-Peer Connection:** When the recipient scans the QR code or opens the share link, the browsers exchange WebRTC SDP offers/answers and ICE candidates via `/ws`.
+4. **Encrypted Streaming:** File data streams directly between browsers over a WebRTC `RTCDataChannel` (DTLS/SCTP encrypted) in 64 KB frames with 2 MB disk read-ahead batching, 8 MB backpressure ceiling, and up to 3 concurrent file workers.
+5. **Integrity Verification:** Both sender and recipient compute incremental SHA-256 checksums (`@noble/hashes/sha2.js`) while streaming, verifying every file on completion.
+6. **Ephemeral Lifecycle:** Closing the sender tab, ending the session, or reaching the configured expiry (`15 min`, `1 hour`, `Auto-close`, or `Manual`) invalidates the session and purges temporary metadata.
+
+## Architecture & Stack
+
+- **Frontend (`web/`):** React, TypeScript, Vite, Tailwind CSS, GSAP, `qrcode.react`, `@noble/hashes`, installable Progressive Web App (PWA) with `manifest.webmanifest` and service worker.
+- **Signalling Server (`server/`):** Rust, Tokio, Axum, WebSockets, `tower-http`, Serde. Serves the compiled static frontend (`STATIC_DIR`) alongside `/api/config`, `/api/sessions`, `/api/sessions/{id}`, `/health`, and `/ws`.
+- **Deployment:** Multi-stage `Dockerfile` running a single binary + static assets.
+
+## Privacy & Limitations
+
+- **Zero Permanent File Storage:** File contents never touch permanent server storage in direct P2P mode.
+- **Sender Must Stay Online:** Because Ferry does not host files in the cloud, the sender's browser tab must remain open and online until the transfer completes.
+- **TURN Relay Fallback:** When direct P2P is blocked by strict NATs or firewalls and a TURN server is configured, encrypted traffic is relayed without persistent storage, and the UI indicates whether the connection is `Direct P2P` or `TURN Relayed`.
