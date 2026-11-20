@@ -264,7 +264,27 @@ export function useSenderSession(
           if (!dcRef.current || dcRef.current.readyState !== 'open') {
             throw new Error('Data channel closed during transfer');
           }
-          if (cancelledFilesRef.current.has(req.fileId)) break;
+          if (cancelledFilesRef.current.has(req.fileId)) {
+            cancelledFilesRef.current.delete(req.fileId);
+            sendControl({
+              v: PROTOCOL_VERSION,
+              type: 'file_cancel',
+              fileId: req.fileId,
+            });
+            setState((prev) => ({
+              ...prev,
+              fileProgress: {
+                ...prev.fileProgress,
+                [req.fileId]: {
+                  fileId: req.fileId,
+                  bytesTransferred: offset + batchPos,
+                  totalBytes: file.size,
+                  status: 'cancelled',
+                },
+              },
+            }));
+            return;
+          }
 
           await waitForBufferDrain(dc);
 
@@ -463,6 +483,13 @@ export function useSenderSession(
         try {
           const msg = JSON.parse(event.data) as DataControlMessage;
           if (msg.type === 'request_files') {
+            for (const r of msg.requests) {
+              cancelledFilesRef.current.delete(r.fileId);
+              // Deduplicate if already queued
+              streamingQueueRef.current = streamingQueueRef.current.filter(
+                (q) => q.fileId !== r.fileId
+              );
+            }
             streamingQueueRef.current.push(...msg.requests);
             processStreamQueue();
           } else if (msg.type === 'file_cancel') {

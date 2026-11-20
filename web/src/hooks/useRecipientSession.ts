@@ -360,12 +360,36 @@ export function useRecipientSession(sessionId: string) {
         }
       };
 
+      let sawIceDisconnect = false;
       pc.oniceconnectionstatechange = () => {
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          sawIceDisconnect = true;
+        } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           reconnectAttemptRef.current = 0;
           detectConnectionMode(pc).then((mode) => {
             setState((prev) => ({ ...prev, connectionMode: mode }));
           });
+
+          // If ICE recovered on the same open DataChannel after a Wi-Fi/cellular switch,
+          // re-request any pending files from their last received byte offset.
+          if (sawIceDisconnect && dcRef.current?.readyState === 'open') {
+            sawIceDisconnect = false;
+            const pendingIds = requestedIdsRef.current.filter(
+              (id) => !completedIdsRef.current.has(id)
+            );
+            if (pendingIds.length > 0) {
+              const requests = pendingIds.map((fileId) => {
+                const writer = writersRef.current.get(fileId);
+                const startOffset = writer && !writer.writable ? writer.receivedBytes : 0;
+                return { fileId, startOffset };
+              });
+              sendControl({
+                v: PROTOCOL_VERSION,
+                type: 'request_files',
+                requests,
+              });
+            }
+          }
         }
       };
 
@@ -568,7 +592,34 @@ export function useRecipientSession(sessionId: string) {
         setState((prev) => ({ ...prev, directoryMode: false }));
       }
 
+      if (!dcRef.current || dcRef.current.readyState !== 'open') {
+        await connect();
+        return;
+      }
+
       requestedIdsRef.current = fileIds;
+      for (const id of fileIds) {
+        completedIdsRef.current.delete(id);
+      }
+
+      setState((prev) => {
+        const nextProgress = { ...prev.fileProgress };
+        for (const id of fileIds) {
+          const meta = filesRef.current.find((f) => f.id === id);
+          nextProgress[id] = {
+            fileId: id,
+            bytesTransferred: 0,
+            totalBytes: meta?.size ?? 0,
+            status: 'queued',
+          };
+        }
+        return {
+          ...prev,
+          lifecycle: 'transferring',
+          fileProgress: nextProgress,
+        };
+      });
+
       const requests = fileIds.map((fileId) => ({
         fileId,
         startOffset: 0,
@@ -579,7 +630,7 @@ export function useRecipientSession(sessionId: string) {
         requests,
       });
     },
-    [sendControl]
+    [connect, sendControl]
   );
 
   const cancelFile = useCallback(
@@ -625,8 +676,12 @@ export function useRecipientSession(sessionId: string) {
   );
 
   const cancelAll = useCallback(() => {
+    const toCancel = new Set<string>([
+      ...requestedIdsRef.current,
+      ...Array.from(writersRef.current.keys()),
+    ]);
     requestedIdsRef.current = [];
-    for (const fileId of Array.from(writersRef.current.keys())) {
+    for (const fileId of toCancel) {
       sendControl({ v: PROTOCOL_VERSION, type: 'file_cancel', fileId });
     }
     abortAllWriters();
