@@ -206,15 +206,15 @@ export const SenderView: React.FC = () => {
       {!isSessionActive ? (
         <>
           {/* Clean Editorial Hero (Apple DESIGN.md scale) */}
-          <div ref={heroRef} className="mx-auto max-w-2xl pt-6 text-center">
-            <h1 className="apple-hero-title text-[42px] font-semibold text-[#1d1d1f] sm:text-[56px] dark:text-white">
+          <div ref={heroRef} className="mx-auto max-w-2xl pt-2 text-center sm:pt-6">
+            <h1 className="apple-hero-title text-[34px] font-semibold text-[#1d1d1f] sm:text-[56px] dark:text-white">
               Big files. One scan.
               <br />
               <span className="bg-gradient-to-r from-[#0066cc] via-[#2997ff] to-[#38BDF8] bg-clip-text text-transparent">
                 Zero storage.
               </span>
             </h1>
-            <p className="apple-body mx-auto mt-4 max-w-md text-[17px] font-normal text-[#7a7a7a] dark:text-[#cccccc]/80">
+            <p className="apple-body mx-auto mt-3 max-w-md text-[15px] font-normal text-[#7a7a7a] sm:mt-4 sm:text-[17px] dark:text-[#cccccc]/80">
               Send files or folders straight to another device. Keep this tab open until they finish.
             </p>
           </div>
@@ -230,7 +230,7 @@ export const SenderView: React.FC = () => {
             onDrop={handleDrop}
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            className={`liquid-glass group relative overflow-hidden rounded-[32px] px-6 py-16 text-center transition-shadow duration-300 sm:px-12 sm:py-20 ${
+            className={`liquid-glass group relative overflow-hidden rounded-[28px] px-5 py-11 text-center transition-shadow duration-300 sm:rounded-[32px] sm:px-12 sm:py-20 ${
               isDragging ? 'ring-2 ring-[#2997ff]/75' : ''
             }`}
           >
@@ -260,11 +260,11 @@ export const SenderView: React.FC = () => {
                 {isDragging ? 'Drop to add' : 'Drop files or folders'}
               </h2>
 
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <div className="mt-6 flex w-full flex-col items-center justify-center gap-2.5 sm:mt-7 sm:w-auto sm:flex-row sm:gap-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="liquid-btn-primary inline-flex cursor-pointer items-center gap-2 rounded-full px-6 py-2.5 text-[14px] font-medium text-white"
+                  className="liquid-btn-primary inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-2.5 text-[14px] font-medium text-white sm:w-auto"
                 >
                   <FilePlus2 className="h-4 w-4" />
                   Choose Files
@@ -272,7 +272,7 @@ export const SenderView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => folderInputRef.current?.click()}
-                  className="liquid-glass-pill inline-flex cursor-pointer items-center gap-2 rounded-full px-6 py-2.5 text-[14px] font-medium text-[#1d1d1f] transition-transform hover:scale-[1.03] active:scale-[0.97] dark:text-white"
+                  className="liquid-glass-pill inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-2.5 text-[14px] font-medium text-[#1d1d1f] transition-transform hover:scale-[1.03] active:scale-[0.97] sm:w-auto dark:text-white"
                 >
                   <FolderUp className="h-4 w-4 text-[#0066cc] dark:text-[#2997ff]" />
                   Choose Folder
@@ -343,7 +343,7 @@ export const SenderView: React.FC = () => {
                   <label className="mb-1.5 block text-[12px] font-medium text-[#7a7a7a] dark:text-[#cccccc]/75">
                     Expires
                   </label>
-                  <div className="grid grid-cols-4 rounded-[14px] bg-black/[0.06] p-1 dark:bg-white/[0.08]">
+                  <div className="grid grid-cols-2 gap-1 rounded-[14px] bg-black/[0.06] p-1 sm:grid-cols-4 dark:bg-white/[0.08]">
                     {EXPIRY_OPTIONS.map((opt, idx) => (
                       <button
                         key={opt.label}

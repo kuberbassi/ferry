@@ -24,7 +24,8 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
   sessionId,
   onExitToSender,
 }) => {
-  const { state, requestFiles, reconnect } = useRecipientSession(sessionId);
+  const { state, requestFiles, cancelFile, cancelAll, reconnect } =
+    useRecipientSession(sessionId);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const supportsDirectoryPicker = 'showDirectoryPicker' in window;
@@ -201,6 +202,7 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
                   selectable={state.lifecycle !== 'transferring'}
                   selected={selectedIds.has(file.id)}
                   onToggleSelect={() => toggleSelect(file.id)}
+                  onCancel={() => cancelFile(file.id)}
                 />
               ))}
             </div>
@@ -218,30 +220,42 @@ export const RecipientView: React.FC<RecipientViewProps> = ({
                 <span>SHA-256 verified on receipt</span>
               </div>
 
-              <div className="flex flex-wrap gap-2.5">
-                {supportsDirectoryPicker && (
+              <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
+                {state.lifecycle === 'transferring' ? (
                   <button
                     type="button"
-                    disabled={selectedIds.size === 0 || state.lifecycle === 'transferring'}
-                    onClick={() => requestFiles(Array.from(selectedIds), true)}
-                    className="liquid-glass-pill inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97] disabled:opacity-50 dark:text-white"
+                    onClick={cancelAll}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-[#FF3B30]/25 bg-[#FF3B30]/12 px-5 py-2.5 text-[13px] font-semibold text-[#FF3B30] transition-all hover:bg-[#FF3B30]/20 active:scale-[0.97] sm:w-auto sm:py-2 dark:text-[#FF453A]"
                   >
-                    <FolderDown className="h-4 w-4 text-[#007AFF] dark:text-[#38BDF8]" />
-                    Save to Folder
+                    Cancel Transfer
                   </button>
-                )}
+                ) : (
+                  <>
+                    {supportsDirectoryPicker && (
+                      <button
+                        type="button"
+                        disabled={selectedIds.size === 0}
+                        onClick={() => requestFiles(Array.from(selectedIds), true)}
+                        className="liquid-glass-pill inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-[#1D1D1F] transition-transform active:scale-[0.97] disabled:opacity-50 sm:w-auto sm:py-2 dark:text-white"
+                      >
+                        <FolderDown className="h-4 w-4 text-[#007AFF] dark:text-[#38BDF8]" />
+                        Save to Folder
+                      </button>
+                    )}
 
-                <button
-                  type="button"
-                  disabled={selectedIds.size === 0 || state.lifecycle === 'transferring'}
-                  onClick={() => requestFiles(Array.from(selectedIds), false)}
-                  className="liquid-btn-primary inline-flex cursor-pointer items-center gap-2 rounded-full px-5 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" />
-                  {selectedIds.size === state.files.length
-                    ? `Download All (${formatBytes(selectedSize)})`
-                    : `Download ${selectedIds.size} (${formatBytes(selectedSize)})`}
-                </button>
+                    <button
+                      type="button"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => requestFiles(Array.from(selectedIds), false)}
+                      className="liquid-btn-primary inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50 sm:w-auto sm:py-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      {selectedIds.size === state.files.length
+                        ? `Download All (${formatBytes(selectedSize)})`
+                        : `Download ${selectedIds.size} (${formatBytes(selectedSize)})`}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

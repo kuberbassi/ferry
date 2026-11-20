@@ -76,6 +76,16 @@ export function useRecipientSession(sessionId: string) {
     }
   }, []);
 
+  const abortAllWriters = useCallback(() => {
+    for (const writer of writersRef.current.values()) {
+      writer.chunks = [];
+      if (writer.writable) {
+        writer.writable.abort().catch(() => {});
+      }
+    }
+    writersRef.current.clear();
+  }, []);
+
   const triggerBlobDownload = (meta: TransferFile, chunks: BlobPart[]) => {
     const blob = new Blob(chunks, { type: meta.mimeType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
@@ -357,6 +367,11 @@ export function useRecipientSession(sessionId: string) {
         };
 
         dc.onclose = () => {
+          if (statsTimerRef.current !== null) {
+            window.clearInterval(statsTimerRef.current);
+            statsTimerRef.current = null;
+          }
+          abortAllWriters();
           setState((prev) => ({
             ...prev,
             speedBps: 0,
@@ -378,8 +393,10 @@ export function useRecipientSession(sessionId: string) {
           } else if (signal.type === 'ice_candidate') {
             await pc.addIceCandidate(signal.candidate).catch(() => {});
           } else if (signal.type === 'session_ended') {
+            abortAllWriters();
             setState((prev) => ({
               ...prev,
+              speedBps: 0,
               lifecycle: prev.lifecycle === 'completed' ? 'completed' : 'ended',
               errorMessage:
                 prev.lifecycle === 'completed'
@@ -464,9 +481,65 @@ export function useRecipientSession(sessionId: string) {
     [sendControl]
   );
 
+  const cancelFile = useCallback(
+    (fileId: string) => {
+      sendControl({
+        v: PROTOCOL_VERSION,
+        type: 'file_cancel',
+        fileId,
+      });
+      const writer = writersRef.current.get(fileId);
+      if (writer) {
+        writer.chunks = [];
+        if (writer.writable) {
+          writer.writable.abort().catch(() => {});
+        }
+        writersRef.current.delete(fileId);
+      }
+      setState((prev) => {
+        const nextProgress = {
+          ...prev.fileProgress,
+          [fileId]: {
+            ...(prev.fileProgress[fileId] || {
+              fileId,
+              bytesTransferred: 0,
+              totalBytes: 0,
+            }),
+            status: 'cancelled' as const,
+          },
+        };
+        const anyActive = Object.values(nextProgress).some(
+          (p) => p.status === 'transferring' || p.status === 'verifying' || p.status === 'queued'
+        );
+        return {
+          ...prev,
+          lifecycle: anyActive ? prev.lifecycle : 'waiting',
+          speedBps: anyActive ? prev.speedBps : 0,
+          fileProgress: nextProgress,
+        };
+      });
+    },
+    [sendControl]
+  );
+
+  const cancelAll = useCallback(() => {
+    for (const fileId of Array.from(writersRef.current.keys())) {
+      sendControl({ v: PROTOCOL_VERSION, type: 'file_cancel', fileId });
+    }
+    abortAllWriters();
+    setState((prev) => ({
+      ...prev,
+      lifecycle: 'waiting',
+      speedBps: 0,
+      fileProgress: {},
+    }));
+  }, [abortAllWriters, sendControl]);
+
   return {
     state,
     requestFiles,
+    cancelFile,
+    cancelAll,
     reconnect: connect,
   };
 }

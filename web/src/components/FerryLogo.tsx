@@ -110,38 +110,38 @@ export const PeerLinkVisualizer: React.FC<PeerLinkVisualizerProps> = ({
       : 'Waiting for Peer';
 
   return (
-    <div className="liquid-glass rounded-[22px] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex h-11 w-11 items-center justify-center">
+    <div className="liquid-glass rounded-[22px] p-3.5 sm:p-4">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center sm:h-11 sm:w-11">
             {!connected && (
               <span className="animate-airdrop-ripple absolute inset-0 rounded-full border border-[#0071e3]/45 dark:border-[#2997ff]/45" />
             )}
             <div
-              className={`relative flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-colors sm:h-11 sm:w-11 ${
                 connected
                   ? 'bg-[#0071e3]/15 text-[#0066cc] dark:bg-[#2997ff]/20 dark:text-[#2997ff]'
                   : 'bg-black/[0.05] text-[#7a7a7a] dark:bg-white/[0.08] dark:text-[#cccccc]'
               }`}
             >
               {role === 'sender' ? (
-                <Laptop className="h-5 w-5" />
+                <Laptop className="h-4 w-4 sm:h-5 sm:w-5" />
               ) : (
-                <Smartphone className="h-5 w-5" />
+                <Smartphone className="h-4 w-4 sm:h-5 sm:w-5" />
               )}
             </div>
           </div>
-          <div>
-            <div className="text-[13px] font-semibold tracking-[-0.01em] text-[#1d1d1f] dark:text-white">
+          <div className="hidden xs:block sm:block">
+            <div className="text-[12px] font-semibold tracking-[-0.01em] text-[#1d1d1f] sm:text-[13px] dark:text-white">
               This Device
             </div>
-            <div className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]/70">
+            <div className="text-[10px] text-[#7a7a7a] sm:text-[11px] dark:text-[#cccccc]/70">
               {role === 'sender' ? 'Sender' : 'Recipient'}
             </div>
           </div>
         </div>
 
-        <div className="relative flex-1 px-2">
+        <div className="relative min-w-0 flex-1 px-1 sm:px-2">
           <svg className="h-5 w-full overflow-visible" viewBox="0 0 120 20" preserveAspectRatio="none">
             <line
               x1="4"
@@ -176,44 +176,44 @@ export const PeerLinkVisualizer: React.FC<PeerLinkVisualizerProps> = ({
           <div className="mt-1 flex items-center justify-center">
             {connected ? (
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:text-[11px] ${
                   connectionMode === 'relayed'
                     ? 'bg-[#FF9500]/15 text-[#FF9500]'
                     : 'bg-[#34C759]/15 text-[#248A3D] dark:bg-[#30D158]/20 dark:text-[#30D158]'
                 }`}
               >
-                <Lock className="h-2.5 w-2.5" />
+                <Lock className="h-2.5 w-2.5 shrink-0" />
                 {modeLabel}
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-[#7a7a7a] dark:bg-white/[0.08] dark:text-[#cccccc]">
-                <Radio className="h-2.5 w-2.5 animate-pulse text-[#0071e3] dark:text-[#2997ff]" />
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-[#7a7a7a] sm:px-2.5 sm:text-[11px] dark:bg-white/[0.08] dark:text-[#cccccc]">
+                <Radio className="h-2.5 w-2.5 shrink-0 animate-pulse text-[#0071e3] dark:text-[#2997ff]" />
                 {modeLabel}
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-[13px] font-semibold tracking-[-0.01em] text-[#1d1d1f] dark:text-white">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden text-right xs:block sm:block">
+            <div className="text-[12px] font-semibold tracking-[-0.01em] text-[#1d1d1f] sm:text-[13px] dark:text-white">
               {role === 'sender' ? 'Recipient' : 'Sender'}
             </div>
-            <div className="text-[11px] text-[#7a7a7a] dark:text-[#cccccc]/70">
+            <div className="text-[10px] text-[#7a7a7a] sm:text-[11px] dark:text-[#cccccc]/70">
               {connected ? 'Connected' : 'Pending'}
             </div>
           </div>
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-full transition-all ${
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all sm:h-11 sm:w-11 ${
               connected
                 ? 'bg-[#34C759]/15 text-[#248A3D] dark:bg-[#30D158]/20 dark:text-[#30D158]'
                 : 'border border-dashed border-black/15 bg-black/[0.03] text-[#AEAEB2] dark:border-white/20 dark:bg-white/[0.04]'
             }`}
           >
             {role === 'sender' ? (
-              <Smartphone className="h-5 w-5" />
+              <Smartphone className="h-4 w-4 sm:h-5 sm:w-5" />
             ) : (
-              <Laptop className="h-5 w-5" />
+              <Laptop className="h-4 w-4 sm:h-5 sm:w-5" />
             )}
           </div>
         </div>

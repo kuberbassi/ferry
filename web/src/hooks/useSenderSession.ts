@@ -6,10 +6,12 @@ import {
   CHUNK_SIZE,
   ConnectionMode,
   DataControlMessage,
+  DISK_READ_SIZE,
   encodeChunkFrame,
   ExpiryPolicy,
   FileProgressState,
   MAX_BUFFERED_AMOUNT,
+  MAX_CONCURRENT_FILES,
   PROTOCOL_VERSION,
   SessionLifecycle,
 } from '../lib/protocol';
@@ -74,7 +76,7 @@ export function useSenderSession(
   const activeRecipientIdRef = useRef<string | null>(null);
   const cancelledFilesRef = useRef<Set<string>>(new Set());
   const streamingQueueRef = useRef<{ fileId: string; startOffset: number }[]>([]);
-  const isStreamingRef = useRef(false);
+  const activeWorkersRef = useRef(0);
   const fileSeqCounterRef = useRef(1);
   const bytesSinceSampleRef = useRef(0);
   const lastSampleTsRef = useRef(performance.now());
@@ -124,8 +126,26 @@ export function useSenderSession(
       pcRef.current.close();
       pcRef.current = null;
     }
-    isStreamingRef.current = false;
+    activeWorkersRef.current = 0;
     streamingQueueRef.current = [];
+    bytesSinceSampleRef.current = 0;
+    cancelledFilesRef.current.clear();
+  }, []);
+
+  const resetInflightProgress = useCallback(() => {
+    setState((prev) => {
+      const next: Record<string, FileProgressState> = {};
+      for (const [id, p] of Object.entries(prev.fileProgress)) {
+        if (p.status === 'verified') {
+          next[id] = p;
+        }
+      }
+      return {
+        ...prev,
+        fileProgress: next,
+        speedBps: 0,
+      };
+    });
   }, []);
 
   const waitForBufferDrain = (dc: RTCDataChannel): Promise<void> => {
@@ -149,146 +169,188 @@ export function useSenderSession(
     });
   };
 
-  const processStreamQueue = useCallback(async () => {
-    if (isStreamingRef.current) return;
-    isStreamingRef.current = true;
+  const streamSingleFile = useCallback(
+    async (req: { fileId: string; startOffset: number }) => {
+      const dc = dcRef.current;
+      if (!dc || dc.readyState !== 'open') return;
+      if (cancelledFilesRef.current.has(req.fileId)) {
+        cancelledFilesRef.current.delete(req.fileId);
+        return;
+      }
 
-    try {
-      while (streamingQueueRef.current.length > 0) {
-        const dc = dcRef.current;
-        if (!dc || dc.readyState !== 'open') break;
+      const item = itemsRef.current.find((i) => i.meta.id === req.fileId);
+      if (!item) return;
 
-        const req = streamingQueueRef.current.shift()!;
+      const fileSeq = fileSeqCounterRef.current++;
+      const file = item.file;
+      const startOffset = Math.max(0, Math.min(req.startOffset, file.size));
+
+      setState((prev) => ({
+        ...prev,
+        lifecycle: 'transferring',
+        fileProgress: {
+          ...prev.fileProgress,
+          [req.fileId]: {
+            fileId: req.fileId,
+            bytesTransferred: startOffset,
+            totalBytes: file.size,
+            status: 'transferring',
+          },
+        },
+      }));
+
+      signallingRef.current?.send({
+        type: 'status_update',
+        state: 'transferring',
+      });
+
+      sendControl({
+        v: PROTOCOL_VERSION,
+        type: 'file_start',
+        fileId: req.fileId,
+        fileSeq,
+        startOffset,
+        size: file.size,
+      });
+
+      const hasher = sha256.create();
+      if (startOffset > 0) {
+        let hashPos = 0;
+        while (hashPos < startOffset) {
+          const end = Math.min(hashPos + DISK_READ_SIZE, startOffset);
+          const buf = await file.slice(hashPos, end).arrayBuffer();
+          hasher.update(new Uint8Array(buf));
+          hashPos = end;
+        }
+      }
+
+      let offset = startOffset;
+      let lastUiUpdate = performance.now();
+
+      while (offset < file.size) {
+        if (!dcRef.current || dcRef.current.readyState !== 'open') {
+          throw new Error('Data channel closed during transfer');
+        }
         if (cancelledFilesRef.current.has(req.fileId)) {
           cancelledFilesRef.current.delete(req.fileId);
-          continue;
+          sendControl({
+            v: PROTOCOL_VERSION,
+            type: 'file_cancel',
+            fileId: req.fileId,
+          });
+          setState((prev) => ({
+            ...prev,
+            fileProgress: {
+              ...prev.fileProgress,
+              [req.fileId]: {
+                fileId: req.fileId,
+                bytesTransferred: offset,
+                totalBytes: file.size,
+                status: 'cancelled',
+              },
+            },
+          }));
+          return;
         }
 
-        const item = itemsRef.current.find((i) => i.meta.id === req.fileId);
-        if (!item) continue;
+        // Read a 2 MB batch from disk in one async call, then frame into 64 KB chunks
+        const batchEnd = Math.min(offset + DISK_READ_SIZE, file.size);
+        const batchBuf = await file.slice(offset, batchEnd).arrayBuffer();
+        const batchBytes = new Uint8Array(batchBuf);
+        hasher.update(batchBytes);
 
-        const fileSeq = fileSeqCounterRef.current++;
-        const file = item.file;
-        const startOffset = Math.max(0, Math.min(req.startOffset, file.size));
+        let batchPos = 0;
+        while (batchPos < batchBytes.byteLength) {
+          if (!dcRef.current || dcRef.current.readyState !== 'open') {
+            throw new Error('Data channel closed during transfer');
+          }
+          if (cancelledFilesRef.current.has(req.fileId)) break;
 
+          await waitForBufferDrain(dc);
+
+          const chunkEnd = Math.min(batchPos + CHUNK_SIZE, batchBytes.byteLength);
+          const chunk = batchBytes.subarray(batchPos, chunkEnd);
+          const frame = encodeChunkFrame(fileSeq, offset + batchPos, chunk);
+          dc.send(frame);
+
+          batchPos = chunkEnd;
+          bytesSinceSampleRef.current += chunk.byteLength;
+
+          const now = performance.now();
+          if (now - lastUiUpdate >= 80) {
+            lastUiUpdate = now;
+            const currentSent = offset + batchPos;
+            setState((prev) => ({
+              ...prev,
+              fileProgress: {
+                ...prev.fileProgress,
+                [req.fileId]: {
+                  fileId: req.fileId,
+                  bytesTransferred: currentSent,
+                  totalBytes: file.size,
+                  status: 'transferring',
+                },
+              },
+            }));
+          }
+        }
+
+        offset = batchEnd;
+      }
+
+      if (offset === file.size && !cancelledFilesRef.current.has(req.fileId)) {
         setState((prev) => ({
           ...prev,
-          lifecycle: 'transferring',
           fileProgress: {
             ...prev.fileProgress,
             [req.fileId]: {
               fileId: req.fileId,
-              bytesTransferred: startOffset,
+              bytesTransferred: file.size,
               totalBytes: file.size,
-              status: 'transferring',
+              status: 'verifying',
             },
           },
         }));
-
-        signallingRef.current?.send({
-          type: 'status_update',
-          state: 'transferring',
-        });
-
+        const digest = bytesToHex(hasher.digest());
         sendControl({
           v: PROTOCOL_VERSION,
-          type: 'file_start',
+          type: 'file_eof',
           fileId: req.fileId,
           fileSeq,
-          startOffset,
-          size: file.size,
+          sha256: digest,
+          totalBytes: file.size,
         });
-
-        const hasher = sha256.create();
-        // If resuming from a non-zero offset, hash the prefix sequentially in bounded chunks
-        if (startOffset > 0) {
-          let hashPos = 0;
-          while (hashPos < startOffset) {
-            const end = Math.min(hashPos + 1024 * 1024, startOffset);
-            const buf = await file.slice(hashPos, end).arrayBuffer();
-            hasher.update(new Uint8Array(buf));
-            hashPos = end;
-          }
-        }
-
-        let offset = startOffset;
-        let lastUiUpdate = performance.now();
-
-        while (offset < file.size) {
-          if (!dcRef.current || dcRef.current.readyState !== 'open') {
-            throw new Error('Data channel closed during transfer');
-          }
-          if (cancelledFilesRef.current.has(req.fileId)) {
-            cancelledFilesRef.current.delete(req.fileId);
-            sendControl({
-              v: PROTOCOL_VERSION,
-              type: 'file_cancel',
-              fileId: req.fileId,
-            });
-            setState((prev) => ({
-              ...prev,
-              fileProgress: {
-                ...prev.fileProgress,
-                [req.fileId]: {
-                  fileId: req.fileId,
-                  bytesTransferred: offset,
-                  totalBytes: file.size,
-                  status: 'cancelled',
-                },
-              },
-            }));
-            break;
-          }
-
-          await waitForBufferDrain(dc);
-
-          const nextEnd = Math.min(offset + CHUNK_SIZE, file.size);
-          const sliceBuf = await file.slice(offset, nextEnd).arrayBuffer();
-          const chunk = new Uint8Array(sliceBuf);
-          hasher.update(chunk);
-
-          const frame = encodeChunkFrame(fileSeq, offset, chunk);
-          dc.send(frame);
-
-          offset = nextEnd;
-          bytesSinceSampleRef.current += chunk.byteLength;
-          const now = performance.now();
-
-          if (now - lastUiUpdate >= 80 || offset === file.size) {
-            lastUiUpdate = now;
-            setState((prev) => ({
-              ...prev,
-              fileProgress: {
-                ...prev.fileProgress,
-                [req.fileId]: {
-                  fileId: req.fileId,
-                  bytesTransferred: offset,
-                  totalBytes: file.size,
-                  status: offset === file.size ? 'verifying' : 'transferring',
-                },
-              },
-            }));
-          }
-        }
-
-        if (offset === file.size) {
-          const digest = bytesToHex(hasher.digest());
-          sendControl({
-            v: PROTOCOL_VERSION,
-            type: 'file_eof',
-            fileId: req.fileId,
-            fileSeq,
-            sha256: digest,
-            totalBytes: file.size,
-          });
-        }
       }
-    } catch (err) {
-      console.error('Streaming error:', err);
-    } finally {
-      isStreamingRef.current = false;
+    },
+    [sendControl]
+  );
+
+  const processStreamQueue = useCallback(() => {
+    const runWorker = async () => {
+      activeWorkersRef.current += 1;
+      try {
+        while (streamingQueueRef.current.length > 0) {
+          const dc = dcRef.current;
+          if (!dc || dc.readyState !== 'open') break;
+          const req = streamingQueueRef.current.shift();
+          if (!req) break;
+          await streamSingleFile(req);
+        }
+      } catch (err) {
+        console.error('Streaming error:', err);
+      } finally {
+        activeWorkersRef.current -= 1;
+      }
+    };
+
+    const needed = Math.min(
+      MAX_CONCURRENT_FILES - activeWorkersRef.current,
+      streamingQueueRef.current.length
+    );
+    for (let i = 0; i < needed; i++) {
+      runWorker();
     }
-  }, [sendControl]);
+  }, [streamSingleFile]);
 
   const setupPeerForRecipient = useCallback(
     async (recipientId: string, iceServers: RTCIceServer[]) => {
@@ -414,10 +476,12 @@ export function useSenderSession(
       };
 
       dc.onclose = () => {
+        resetInflightProgress();
         setState((prev) => ({
           ...prev,
           recipientConnected: false,
           speedBps: 0,
+          lifecycle: prev.lifecycle === 'completed' ? 'completed' : 'waiting',
         }));
       };
 
@@ -479,6 +543,7 @@ export function useSenderSession(
             await setupPeerForRecipient(signal.recipient_id, config.ice_servers);
           } else if (signal.type === 'peer_left') {
             cleanupPeer();
+            resetInflightProgress();
             setState((prev) => ({
               ...prev,
               recipientConnected: false,

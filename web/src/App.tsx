@@ -172,7 +172,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 mx-auto w-full max-w-[980px] flex-1 px-4 pb-16 pt-10 sm:px-6">
+      <main className="relative z-10 mx-auto w-full max-w-[980px] flex-1 px-4 pb-12 pt-6 sm:px-6 sm:pb-16 sm:pt-10">
         {route.kind === 'recipient' ? (
           <RecipientView sessionId={route.sessionId} onExitToSender={navigateHome} />
         ) : route.kind === 'legal' ? (

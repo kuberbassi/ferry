@@ -1,7 +1,9 @@
 export const PROTOCOL_VERSION = 1;
-export const CHUNK_SIZE = 64 * 1024; // 64 KB chunks for smooth WebRTC SCTP framing
-export const MAX_BUFFERED_AMOUNT = 1024 * 1024; // 1 MB backpressure ceiling
-export const BUFFERED_LOW_THRESHOLD = 256 * 1024; // 256 KB resume threshold
+export const CHUNK_SIZE = 64 * 1024; // 64 KB SCTP-safe wire frame
+export const DISK_READ_SIZE = 2 * 1024 * 1024; // 2 MB disk read-ahead batch
+export const MAX_BUFFERED_AMOUNT = 8 * 1024 * 1024; // 8 MB pipeline ceiling for max throughput
+export const BUFFERED_LOW_THRESHOLD = 2 * 1024 * 1024; // 2 MB resume threshold
+export const MAX_CONCURRENT_FILES = 3; // Parallel file transfers
 export const FRAME_MAGIC = 0x46525931; // "FRY1"
 export const FRAME_HEADER_BYTES = 20;
 
