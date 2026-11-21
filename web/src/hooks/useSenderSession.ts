@@ -83,6 +83,8 @@ export function useSenderSession(
   const lastSampleTsRef = useRef(performance.now());
   const stopStatsTimerRef = useRef<(() => void) | null>(null);
   const ackedBytesRef = useRef<Map<string, number>>(new Map());
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const activeStreamGenRef = useRef<Map<string, number>>(new Map());
 
   const sendControl = useCallback((msg: DataControlMessage) => {
     const dc = dcRef.current;
@@ -132,6 +134,8 @@ export function useSenderSession(
     streamingQueueRef.current = [];
     bytesSinceSampleRef.current = 0;
     cancelledFilesRef.current.clear();
+    pendingCandidatesRef.current = [];
+    activeStreamGenRef.current.clear();
   }, []);
 
   const resetInflightProgress = useCallback(() => {
@@ -186,9 +190,17 @@ export function useSenderSession(
       const item = itemsRef.current.find((i) => i.meta.id === req.fileId);
       if (!item) return;
 
+      const myGen = (activeStreamGenRef.current.get(req.fileId) ?? 0) + 1;
+      activeStreamGenRef.current.set(req.fileId, myGen);
+
       const fileSeq = fileSeqCounterRef.current++;
       const file = item.file;
       const startOffset = Math.max(0, Math.min(req.startOffset, file.size));
+      const maxSctp = pcRef.current?.sctp?.maxMessageSize;
+      const effectiveChunkSize =
+        maxSctp && maxSctp > 16384
+          ? Math.min(CHUNK_SIZE, Math.max(16384, maxSctp - 64))
+          : CHUNK_SIZE;
 
       setState((prev) => ({
         ...prev,
@@ -236,6 +248,10 @@ export function useSenderSession(
         if (!dcRef.current || dcRef.current.readyState !== 'open') {
           throw new Error('Data channel closed during transfer');
         }
+        // If superseded by a newer resume request for the same fileId, exit silently
+        if (activeStreamGenRef.current.get(req.fileId) !== myGen) {
+          return;
+        }
         if (cancelledFilesRef.current.has(req.fileId)) {
           cancelledFilesRef.current.delete(req.fileId);
           sendControl({
@@ -269,6 +285,9 @@ export function useSenderSession(
           if (!dcRef.current || dcRef.current.readyState !== 'open') {
             throw new Error('Data channel closed during transfer');
           }
+          if (activeStreamGenRef.current.get(req.fileId) !== myGen) {
+            return;
+          }
           if (cancelledFilesRef.current.has(req.fileId)) {
             cancelledFilesRef.current.delete(req.fileId);
             sendControl({
@@ -293,7 +312,7 @@ export function useSenderSession(
 
           await waitForBufferDrain(dc);
 
-          const chunkEnd = Math.min(batchPos + CHUNK_SIZE, batchBytes.byteLength);
+          const chunkEnd = Math.min(batchPos + effectiveChunkSize, batchBytes.byteLength);
           const chunk = batchBytes.subarray(batchPos, chunkEnd);
           const frame = encodeChunkFrame(fileSeq, offset + batchPos, chunk);
           dc.send(frame);
@@ -324,7 +343,11 @@ export function useSenderSession(
         offset = batchEnd;
       }
 
-      if (offset === file.size && !cancelledFilesRef.current.has(req.fileId)) {
+      if (
+        offset === file.size &&
+        !cancelledFilesRef.current.has(req.fileId) &&
+        activeStreamGenRef.current.get(req.fileId) === myGen
+      ) {
         setState((prev) => ({
           ...prev,
           fileProgress: {
@@ -383,7 +406,7 @@ export function useSenderSession(
       cleanupPeer();
       activeRecipientIdRef.current = recipientId;
 
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4 });
       pcRef.current = pc;
 
       const dc = pc.createDataChannel('ferry-transfer', { ordered: true });
@@ -629,8 +652,16 @@ export function useSenderSession(
               type: 'answer',
               sdp: signal.sdp,
             });
+            while (pendingCandidatesRef.current.length > 0) {
+              const cand = pendingCandidatesRef.current.shift()!;
+              await pcRef.current.addIceCandidate(cand).catch(() => {});
+            }
           } else if (signal.type === 'ice_candidate' && pcRef.current) {
-            await pcRef.current.addIceCandidate(signal.candidate).catch(() => {});
+            if (pcRef.current.remoteDescription) {
+              await pcRef.current.addIceCandidate(signal.candidate).catch(() => {});
+            } else {
+              pendingCandidatesRef.current.push(signal.candidate);
+            }
           } else if (signal.type === 'session_ended') {
             cleanupPeer();
             setState((prev) => ({

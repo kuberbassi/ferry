@@ -1,4 +1,5 @@
 import { ExpiryPolicy } from './protocol';
+import { createBgInterval } from './bgTimer';
 
 export interface IceServerConfig {
   urls: string[];
@@ -139,8 +140,9 @@ export function getWebSocketUrl(): string {
 
 export class SignallingClient {
   private ws: WebSocket | null = null;
-  private pingTimer: number | null = null;
+  private stopPingTimer: (() => void) | null = null;
   private reconnectTimer: number | null = null;
+  private reconnectAttempts = 0;
   private closedByUser = false;
   private joinPayload: Record<string, unknown> | null = null;
   private onSignal: (signal: ServerSignal) => void;
@@ -156,6 +158,7 @@ export class SignallingClient {
           window.clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
         }
+        this.reconnectAttempts = 0;
         this.openSocket().catch(() => {});
       }
     };
@@ -164,6 +167,7 @@ export class SignallingClient {
 
   connect(): Promise<void> {
     this.closedByUser = false;
+    this.reconnectAttempts = 0;
     return this.openSocket();
   }
 
@@ -175,7 +179,9 @@ export class SignallingClient {
 
       ws.onopen = () => {
         opened = true;
-        this.pingTimer = window.setInterval(() => {
+        this.reconnectAttempts = 0;
+        this.cleanupTimers();
+        this.stopPingTimer = createBgInterval(() => {
           this.send({ type: 'ping' });
         }, 15_000);
         if (this.joinPayload) {
@@ -205,14 +211,17 @@ export class SignallingClient {
           this.onClose();
           return;
         }
-        // Auto-reconnect signalling silently so active WebRTC transfers survive proxy WS drops
+        if (this.reconnectAttempts >= 10) {
+          this.onClose();
+          return;
+        }
+        this.reconnectAttempts += 1;
+        const delay = Math.min(8000, 1200 * this.reconnectAttempts);
         this.reconnectTimer = window.setTimeout(() => {
           if (!this.closedByUser) {
-            this.openSocket().catch(() => {
-              this.onClose();
-            });
+            this.openSocket().catch(() => {});
           }
-        }, 1500);
+        }, delay);
       };
     });
   }
@@ -242,9 +251,9 @@ export class SignallingClient {
   }
 
   private cleanupTimers(): void {
-    if (this.pingTimer !== null) {
-      window.clearInterval(this.pingTimer);
-      this.pingTimer = null;
+    if (this.stopPingTimer !== null) {
+      this.stopPingTimer();
+      this.stopPingTimer = null;
     }
   }
 }

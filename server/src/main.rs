@@ -5,7 +5,8 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         ConnectInfo, Path, State,
     },
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    middleware::{self, Next},
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
@@ -13,9 +14,13 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use session::{
-    ClientSignal, ExpiryPolicy, ServerSignal, SessionStore, DEFAULT_TTL_SECS, MAX_TTL_SECS,
+    is_valid_token_format, ClientSignal, ExpiryPolicy, ServerSignal, SessionStore,
+    DEFAULT_TTL_SECS, MAX_TTL_SECS,
 };
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::{Duration, Instant},
+};
 use tokio::sync::mpsc;
 use tower_http::{
     cors::CorsLayer,
@@ -109,7 +114,10 @@ async fn main() {
         );
     }
 
-    let app = app.layer(CorsLayer::permissive()).with_state(state);
+    let app = app
+        .layer(middleware::from_fn(security_headers_middleware))
+        .layer(CorsLayer::permissive())
+        .with_state(state);
 
     let port: u16 = std::env::var("PORT")
         .ok()
@@ -133,6 +141,7 @@ async fn main() {
 fn load_ice_servers_from_env() -> Vec<IceServerConfig> {
     let mut servers = vec![IceServerConfig {
         urls: vec![
+            "stun:stun.cloudflare.com:3478".to_string(),
             "stun:stun.l.google.com:19302".to_string(),
             "stun:stun1.l.google.com:19302".to_string(),
         ],
@@ -176,18 +185,56 @@ async fn config_handler(State(state): State<AppState>) -> Json<ClientConfigRespo
     })
 }
 
+async fn security_headers_middleware(
+    req: axum::extract::Request,
+    next: Next,
+) -> impl IntoResponse {
+    let mut res = next.run(req).await;
+    let headers = res.headers_mut();
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    res
+}
+
+fn extract_client_ip(headers: &HeaderMap, fallback: IpAddr) -> IpAddr {
+    if let Some(cf_ip) = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<IpAddr>().ok())
+    {
+        return cf_ip;
+    }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = xff.split(',').next() {
+            if let Ok(ip) = first.trim().parse::<IpAddr>() {
+                return ip;
+            }
+        }
+    }
+    fallback
+}
+
 async fn create_session_handler(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(payload): Json<CreateSessionRequest>,
 ) -> impl IntoResponse {
+    let client_ip = extract_client_ip(&headers, addr.ip());
     match state
         .store
         .create_session(
             payload.expiry_policy,
             payload.ttl_seconds,
             payload.label,
-            Some(addr.ip()),
+            Some(client_ip),
         )
         .await
     {
@@ -288,16 +335,32 @@ async fn handle_ws(socket: WebSocket, state: AppState) {
     });
 
     let mut role: Option<PeerRole> = None;
+    let mut msg_window_start = Instant::now();
+    let mut msg_count_in_window: u32 = 0;
 
     while let Some(Ok(msg)) = ws_receiver.next().await {
+        // Per-connection rate limit: max 80 signalling messages per second
+        if msg_window_start.elapsed() >= Duration::from_secs(1) {
+            msg_window_start = Instant::now();
+            msg_count_in_window = 0;
+        }
+        msg_count_in_window += 1;
+        if msg_count_in_window > 80 {
+            let _ = tx.send(ServerSignal::Error {
+                code: "rate_limited".to_string(),
+                message: "Signalling message rate limit exceeded.".to_string(),
+            });
+            break;
+        }
+
         let text = match msg {
             Message::Text(t) => t,
             Message::Close(_) => break,
             Message::Ping(_) | Message::Pong(_) | Message::Binary(_) => continue,
         };
 
-        // Bound incoming signalling message size (256 KB max for SDP)
-        if text.len() > 256 * 1024 {
+        // Bound incoming signalling message size (128 KB max for SDP)
+        if text.len() > 128 * 1024 {
             let _ = tx.send(ServerSignal::Error {
                 code: "payload_too_large".to_string(),
                 message: "Signalling message exceeds maximum size.".to_string(),
@@ -326,6 +389,15 @@ async fn handle_ws(socket: WebSocket, state: AppState) {
             } => {
                 if role.is_some() {
                     continue;
+                }
+                if !is_valid_token_format(&session_id, 12, 32)
+                    || !is_valid_token_format(&sender_token, 16, 48)
+                {
+                    let _ = tx.send(ServerSignal::Error {
+                        code: "invalid_token".to_string(),
+                        message: "Invalid session or token format.".to_string(),
+                    });
+                    break;
                 }
                 match state
                     .store

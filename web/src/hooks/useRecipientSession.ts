@@ -86,6 +86,7 @@ export function useRecipientSession(sessionId: string) {
   const lastSampleTsRef = useRef(performance.now());
   const lastProgressUiRef = useRef(0);
   const stopStatsTimerRef = useRef<(() => void) | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const sendControl = useCallback((msg: DataControlMessage) => {
     const dc = dcRef.current;
@@ -423,8 +424,12 @@ export function useRecipientSession(sessionId: string) {
         manifestLabel: sessionInfo.label,
       }));
 
-      const pc = new RTCPeerConnection({ iceServers: config.ice_servers });
+      const pc = new RTCPeerConnection({
+        iceServers: config.ice_servers,
+        iceCandidatePoolSize: 4,
+      });
       pcRef.current = pc;
+      pendingCandidatesRef.current = [];
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -584,8 +589,16 @@ export function useRecipientSession(sessionId: string) {
               type: 'answer',
               sdp: answer.sdp,
             });
+            while (pendingCandidatesRef.current.length > 0) {
+              const cand = pendingCandidatesRef.current.shift()!;
+              await pc.addIceCandidate(cand).catch(() => {});
+            }
           } else if (signal.type === 'ice_candidate') {
-            await pc.addIceCandidate(signal.candidate).catch(() => {});
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(signal.candidate).catch(() => {});
+            } else {
+              pendingCandidatesRef.current.push(signal.candidate);
+            }
           } else if (signal.type === 'session_ended') {
             endedBySenderRef.current = true;
             abortAllWriters();

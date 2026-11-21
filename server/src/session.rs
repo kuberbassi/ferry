@@ -130,6 +130,7 @@ pub struct PublicSessionInfo {
     pub label: Option<String>,
     pub expiry_policy: ExpiryPolicy,
     pub state: SessionState,
+    pub created_at_ms: u64,
     pub expires_at_ms: Option<u64>,
     pub sender_online: bool,
     pub recipient_count: usize,
@@ -240,6 +241,7 @@ impl SessionStore {
             label: s.label.clone(),
             expiry_policy: s.expiry_policy,
             state: s.state,
+            created_at_ms: s.created_at_ms,
             expires_at_ms: s.expires_at_ms,
             sender_online: s.sender_tx.is_some(),
             recipient_count: s.recipients.len(),
@@ -472,6 +474,10 @@ fn notify_session_ended(session: Session, reason: &str) {
 }
 
 fn is_expired(session: &Session, now: u64) -> bool {
+    // Hard ceiling: no session can outlive MAX_TTL_SECS regardless of state
+    if now.saturating_sub(session.created_at_ms) >= MAX_TTL_SECS * 1000 {
+        return true;
+    }
     if session.state == SessionState::Transferring {
         return false;
     }
@@ -486,6 +492,14 @@ fn is_expired(session: &Session, now: u64) -> bool {
         return true;
     }
     false
+}
+
+pub fn is_valid_token_format(s: &str, min_len: usize, max_len: usize) -> bool {
+    let len = s.len();
+    len >= min_len
+        && len <= max_len
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 pub fn now_ms() -> u64 {
