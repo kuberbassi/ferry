@@ -25,11 +25,16 @@ Sender Browser  ── WebRTC DataChannel (DTLS) ──▶  Recipient Browser
 
 ### Run Locally
 
+Requires **Rust (Cargo)** and **Node.js 18+**.
+
 ```bash
-# 1. Signalling server (:8787)
+git clone https://github.com/kuberbassi/ferry.git
+cd ferry
+
+# 1. Signalling server (:8787) — terminal 1
 cd server && cargo run
 
-# 2. Frontend (:5173)
+# 2. Frontend (:5173) — terminal 2
 cd web && npm install && npm run dev
 ```
 
